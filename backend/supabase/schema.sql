@@ -1,0 +1,2 @@
+-- This is a deprecated copy of the schema. The canonical schema is in the repository root at ../supabase/schema.sql
+-- Use that file for migrations and schema changes.
