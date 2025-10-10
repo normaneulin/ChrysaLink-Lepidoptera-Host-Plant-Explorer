@@ -55,7 +55,8 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
       if (signInData.session?.access_token) {
         onAuthSuccess(signInData.session.access_token);
         toast.success('Account created successfully!');
-        setLocation('/explore');
+        // After signup take the user to the Home page ("/") instead of Explore
+        setLocation('/');
       }
     } catch (error: any) {
       console.error('Sign up error:', error);
@@ -89,7 +90,8 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
       if (data.session?.access_token) {
         onAuthSuccess(data.session.access_token);
         toast.success('Signed in successfully!');
-        setLocation('/explore');
+        // After sign in take the user to the Home page ("/")
+        setLocation('/');
       }
     } catch (error: any) {
       console.error('Sign in error:', error);
