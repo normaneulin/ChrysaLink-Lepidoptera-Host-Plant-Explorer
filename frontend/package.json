@@ -1,5 +1,5 @@
 {
-      "name": "Lepidoptera Host Plant Explorer",
+      "name": "lepidoptera-host-plant-explorer",
       "version": "0.1.0",
       "private": true,
       "dependencies": {
