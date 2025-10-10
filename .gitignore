@@ -1,0 +1,16 @@
+# Node modules
+node_modules/
+
+# Vite optimization
+node_modules/.vite/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env
+.env
+
+# backup files
+src_backup_from_main_*/
