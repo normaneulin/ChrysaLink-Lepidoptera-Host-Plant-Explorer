@@ -1,0 +1,1 @@
+-- Deprecated copy of migration. Use ../supabase/migrations/001_init.sql as the authoritative migration.
