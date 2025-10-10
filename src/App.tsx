@@ -129,7 +129,9 @@ export default function App() {
 
           <Route path="/auth">
             {isLoggedIn ? (
-              <ExplorePage accessToken={accessToken} userId={userId} />
+              // If the user somehow lands on /auth while already logged in,
+              // render the HomePage instead of ExplorePage so Home is the default.
+              <HomePage accessToken={accessToken} userId={userId} />
             ) : (
               <AuthPage onAuthSuccess={handleAuthSuccess} />
             )}
