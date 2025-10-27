@@ -140,7 +140,7 @@ export function RelationshipPage() {
         </Card>
 
   <div className="mt-8 p-6 bg-green-50 rounded-lg border border-green-200">
-          <h3 className="font-semibold mb-2">Coming Soon: Advanced Visualizations</h3>
+          <h3 className="font-semibold mb-2">Advanced Visualizations</h3>
           <ul className="space-y-2 text-sm text-gray-700">
             <li>• Interactive network graphs showing species connections</li>
             <li>• Filter by taxonomic family (e.g., Nymphalidae, Papilionidae)</li>
