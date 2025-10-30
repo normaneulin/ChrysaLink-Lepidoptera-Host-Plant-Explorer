@@ -9,6 +9,7 @@ import { Search } from 'lucide-react';
 import { ObservationDetailModal } from './ObservationDetailModal';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { toast } from 'sonner';
+import { getSupabaseClient } from '../utils/supabase/client';
 
 export function HomePage({ accessToken, userId }: { accessToken?: string | null; userId?: string | null }) {
   const [observations, setObservations] = useState<any[]>([]);
@@ -27,6 +28,7 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
   const fetchFeed = async () => {
     setIsLoading(true);
     try {
+      // Try serverless function first
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations?limit=20`,
         {
@@ -36,10 +38,38 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
         }
       );
 
-      const data = await response.json();
       if (response.ok) {
+        const data = await response.json();
         setObservations(data.observations || []);
+        return;
       }
+
+      // If serverless fails, fetch directly from Supabase KV store
+      console.log('Serverless function unavailable, fetching from KV store...');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('kv_store_b55216b3')
+        .select('value')
+        .like('key', 'obs:%');
+
+      if (error) {
+        console.error('Error fetching from KV:', error);
+        return;
+      }
+
+      // Parse the KV store values
+      const obs = data
+        ?.map((item: any) => {
+          try {
+            return typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
+          } catch (e) {
+            console.error('Error parsing observation:', e);
+            return null;
+          }
+        })
+        .filter(Boolean) || [];
+
+      setObservations(obs);
     } catch (error) {
       console.error('Error fetching feed:', error);
     } finally {
