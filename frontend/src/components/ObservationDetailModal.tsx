@@ -9,6 +9,7 @@ import { MapPin, Calendar, CheckCircle, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Separator } from './ui/separator';
+import { getSupabaseClient } from '../utils/supabase/client';
 
 interface ObservationDetailModalProps {
   observation: any;
@@ -187,16 +188,48 @@ export function ObservationDetailModal({
 
     setIsSubmitting(true);
     try {
+      // Try the serverless function first
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations/${localObservation.id}`,
         {
           method: 'DELETE',
           headers: {
-            'Authorization': `Bearer ${accessToken}`
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
           }
         }
       );
 
+      if (response.ok) {
+        toast.success('Observation deleted successfully');
+        onClose();
+        onUpdate();
+        return;
+      }
+
+      // If serverless function fails, try direct Supabase delete
+      if (response.status === 404 || response.status === 502) {
+        console.log('Serverless function not available, trying direct delete...');
+        
+        const supabase = getSupabaseClient();
+        const { error } = await supabase
+          .from('kv_store_b55216b3')
+          .delete()
+          .eq('key', `obs:${localObservation.id}`);
+
+        if (error) {
+          throw new Error(error.message || 'Failed to delete from database');
+        }
+
+        toast.success('Observation deleted successfully');
+        setIsSubmitting(false);
+        onClose();
+        // Add a slight delay to ensure the modal closes before refresh
+        setTimeout(() => onUpdate(), 300);
+        return;
+      }
+
+      // Handle other errors
       const text = await response.text();
       let data: any = null;
       try {
@@ -205,18 +238,12 @@ export function ObservationDetailModal({
         data = text;
       }
 
-      if (!response.ok) {
-        const msg = data && typeof data === 'object' && data.error ? data.error : (typeof data === 'string' && data.length ? data : 'Failed to delete');
-        throw new Error(msg);
-      }
-
-      toast.success('Observation deleted');
-      setIsSubmitting(false);
-      onClose();
-      onUpdate();
+      const msg = data && typeof data === 'object' && data.error ? data.error : (typeof data === 'string' && data.length ? data : `Failed to delete (${response.status})`);
+      throw new Error(msg);
     } catch (err: any) {
-      console.error('Delete error', err);
-      toast.error(err.message || 'Failed to delete');
+      console.error('Delete error:', err);
+      toast.error(err.message || 'Failed to delete observation. Please try again.');
+    } finally {
       setIsSubmitting(false);
     }
   };
@@ -310,6 +337,9 @@ export function ObservationDetailModal({
               {!isEditing ? (
                 <>
                   <Button variant="ghost" onClick={() => setIsEditing(true)}>Edit</Button>
+                  <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
+                    {isSubmitting ? 'Deleting...' : 'Delete'}
+                  </Button>
                 </>
               ) : (
                 <div className="flex items-center gap-2">
@@ -321,7 +351,6 @@ export function ObservationDetailModal({
                     location: localObservation?.location || '',
                     date: localObservation?.date ? new Date(localObservation.date).toISOString().slice(0,10) : ''
                   }); }}>Cancel</Button>
-                  <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>Delete</Button>
                 </div>
               )}
             </div>

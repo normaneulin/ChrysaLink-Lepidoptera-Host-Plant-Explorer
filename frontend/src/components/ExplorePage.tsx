@@ -4,11 +4,21 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
-import { Search, MapPin, Calendar, MessageSquare } from 'lucide-react';
+import { Search, MapPin, Calendar, MessageSquare, ChevronDown } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuCheckboxItem,
+} from './ui/dropdown-menu';
 import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { toast } from 'sonner';
 import { ObservationDetailModal } from './ObservationDetailModal';
 import ExploreMap from './ExploreMap';
+import { getSupabaseClient } from '../utils/supabase/client';
 
 interface Observation {
   id: string;
@@ -48,28 +58,48 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedObservation, setSelectedObservation] = useState<Observation | null>(null);
+  const [filterByLocation, setFilterByLocation] = useState<string>('');
+  const [filterByUser, setFilterByUser] = useState<string>('');
 
   useEffect(() => {
     fetchObservations();
   }, [showOnlyUserObservations, userId]);
 
   useEffect(() => {
-    // Filter observations based on search query
+    // Filter observations based on search query and filters
+    let filtered = observations;
+
+    // Species search filter
     if (searchQuery.trim()) {
-      const filtered = observations.filter(obs => 
+      filtered = filtered.filter(obs => 
         obs.lepidoptera.species?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        obs.hostPlant.species?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        obs.location?.toLowerCase().includes(searchQuery.toLowerCase())
+        obs.hostPlant.species?.toLowerCase().includes(searchQuery.toLowerCase())
       );
-      setFilteredObservations(filtered);
-    } else {
-      setFilteredObservations(observations);
     }
-  }, [searchQuery, observations]);
+
+    // Location filter
+    if (filterByLocation.trim()) {
+      filtered = filtered.filter(obs =>
+        obs.location?.toLowerCase().includes(filterByLocation.toLowerCase())
+      );
+    }
+
+    // User filter
+    if (filterByUser && filterByUser !== 'all') {
+      filtered = filtered.filter(obs =>
+        filterByUser === 'mine' 
+          ? obs.userId === userId 
+          : obs.userId !== userId
+      );
+    }
+
+    setFilteredObservations(filtered);
+  }, [searchQuery, observations, filterByLocation, filterByUser, userId]);
 
   const fetchObservations = async () => {
     setIsLoading(true);
     try {
+      // Try serverless function first
       const url = showOnlyUserObservations && userId
         ? `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations?userId=${userId}`
         : `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations`;
@@ -80,14 +110,44 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
         }
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch observations');
+      if (response.ok) {
+        const data = await response.json();
+        setObservations(data.observations || []);
+        setFilteredObservations(data.observations || []);
+        return;
       }
 
-      setObservations(data.observations || []);
-      setFilteredObservations(data.observations || []);
+      // If serverless fails, fetch directly from Supabase KV store
+      console.log('Serverless function unavailable, fetching from KV store...');
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('kv_store_b55216b3')
+        .select('value')
+        .like('key', 'obs:%');
+
+      if (error) {
+        throw new Error(error.message || 'Failed to fetch observations');
+      }
+
+      // Parse the KV store values
+      let obs = data
+        ?.map((item: any) => {
+          try {
+            return typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
+          } catch (e) {
+            console.error('Error parsing observation:', e);
+            return null;
+          }
+        })
+        .filter(Boolean) || [];
+
+      // Filter by user if needed
+      if (showOnlyUserObservations && userId) {
+        obs = obs.filter((o: any) => o.userId === userId);
+      }
+
+      setObservations(obs);
+      setFilteredObservations(obs);
     } catch (error: any) {
       console.error('Error fetching observations:', error);
       toast.error(error.message || 'Failed to load observations');
@@ -97,11 +157,12 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
   };
 
   const MapView = () => (
-    <div className="h-[600px]">
+    <div className="h-[600px] relative z-0">
       <ExploreMap
         observations={filteredObservations}
         height={600}
         onSelect={(obs) => setSelectedObservation(obs as Observation)}
+        isModalOpen={!!selectedObservation}
       />
     </div>
   );
@@ -228,20 +289,114 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
           {showOnlyUserObservations ? 'Your Observations' : 'Explore Observations'}
         </h1>
         
-        <div className="flex gap-4">
+        <div className="flex gap-3 items-center">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search by species or location..."
+              placeholder="Search by species..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
             />
           </div>
+
+          {/* Filter Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <ChevronDown className="h-4 w-4" />
+                Filters
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>Filter Options</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+
+              {/* Location Filter */}
+              <div className="px-3 py-2">
+                <label className="text-sm font-medium block mb-2">Location</label>
+                <Input
+                  placeholder="Filter by location..."
+                  value={filterByLocation}
+                  onChange={(e) => setFilterByLocation(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
+
+              <DropdownMenuSeparator />
+
+              {/* User Filter */}
+              <div className="px-3 py-2">
+                <label className="text-sm font-medium block mb-2">Observations</label>
+                <div className="space-y-2">
+                  <DropdownMenuCheckboxItem
+                    checked={filterByUser === 'all'}
+                    onCheckedChange={() => setFilterByUser('all')}
+                  >
+                    All Observations
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={filterByUser === 'mine'}
+                    onCheckedChange={() => setFilterByUser('mine')}
+                  >
+                    My Observations
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={filterByUser === 'others'}
+                    onCheckedChange={() => setFilterByUser('others')}
+                  >
+                    Others' Observations
+                  </DropdownMenuCheckboxItem>
+                </div>
+              </div>
+
+              <DropdownMenuSeparator />
+
+              {/* Clear Filters */}
+              <DropdownMenuItem onClick={() => {
+                setFilterByLocation('');
+                setFilterByUser('all');
+                setSearchQuery('');
+              }}>
+                <span className="text-sm">Clear All Filters</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button variant="outline" onClick={fetchObservations}>
             Refresh
           </Button>
         </div>
+
+        {/* Active Filters Display */}
+        {(searchQuery || filterByLocation || (filterByUser && filterByUser !== 'all')) && (
+          <div className="flex gap-2 mt-4 flex-wrap">
+            {searchQuery && (
+              <Badge variant="secondary">
+                Species: {searchQuery}
+                <button onClick={() => setSearchQuery('')} className="ml-2">×</button>
+              </Badge>
+            )}
+            {filterByLocation && (
+              <Badge variant="secondary">
+                Location: {filterByLocation}
+                <button onClick={() => setFilterByLocation('')} className="ml-2">×</button>
+              </Badge>
+            )}
+            {filterByUser === 'mine' && (
+              <Badge variant="secondary">
+                My Observations
+                <button onClick={() => setFilterByUser('all')} className="ml-2">×</button>
+              </Badge>
+            )}
+            {filterByUser === 'others' && (
+              <Badge variant="secondary">
+                Others' Observations
+                <button onClick={() => setFilterByUser('all')} className="ml-2">×</button>
+              </Badge>
+            )}
+          </div>
+        )}
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -294,16 +449,18 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
         </TabsContent>
       </Tabs>
 
-      {selectedObservation && (
-        <ObservationDetailModal
-          observation={selectedObservation}
-          isOpen={!!selectedObservation}
-          onClose={() => setSelectedObservation(null)}
-          accessToken={accessToken}
-          currentUserId={userId}
-          onUpdate={fetchObservations}
-        />
-      )}
+      <div className="relative z-50">
+        {selectedObservation && (
+          <ObservationDetailModal
+            observation={selectedObservation}
+            isOpen={!!selectedObservation}
+            onClose={() => setSelectedObservation(null)}
+            accessToken={accessToken}
+            currentUserId={userId}
+            onUpdate={fetchObservations}
+          />
+        )}
+      </div>
     </div>
   );
 }

@@ -178,15 +178,16 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                   {lepidopteraImage ? (
                     <div className="relative">
                       <img src={lepidopteraImage} alt="Lepidoptera" className="w-full h-48 object-cover rounded" />
-                      <Button
+                      <button
                         type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="absolute top-2 right-2"
+                        className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
                         onClick={() => setLepidopteraImage('')}
+                        title="Remove image"
                       >
-                        Remove
-                      </Button>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
                   ) : (
                     <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
@@ -262,15 +263,16 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                   {hostPlantImage ? (
                     <div className="relative">
                       <img src={hostPlantImage} alt="Host Plant" className="w-full h-48 object-cover rounded" />
-                      <Button
+                      <button
                         type="button"
-                        variant="destructive"
-                        size="sm"
-                        className="absolute top-2 right-2"
+                        className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
                         onClick={() => setHostPlantImage('')}
+                        title="Remove image"
                       >
-                        Remove
-                      </Button>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
                   ) : (
                     <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">

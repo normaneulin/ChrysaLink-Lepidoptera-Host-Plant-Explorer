@@ -166,7 +166,7 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
         </Card>
       </div>
 
-      {/*
+      
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -214,13 +214,13 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
           </div>
         </CardContent>
       </Card>
-      */}
+      
 
       <div className="mt-6 p-6 bg-blue-50 rounded-lg border border-blue-200">
         <h3 className="font-semibold mb-2">How to Increase Your Rating</h3>
         <ul className="space-y-2 text-sm text-gray-700">
           <li>• Suggest species identifications on observations</li>
-          <li>• Have your identifications verified by observation owners</li>
+          <li>• Have your identifications verified by the community</li>
           <li>• Each verified identification earns you 1 rating point</li>
           <li>• Higher ratings increase your credibility in the community</li>
         </ul>
