@@ -31,7 +31,7 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
         throw new Error('User not found');
       }
 
-      // Fetch user profile
+      // Fetch user profile with all details
       const response = await fetch(
         `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/users/${user.id}`,
         {
@@ -44,7 +44,15 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
       const data = await response.json();
 
       if (response.ok) {
-        setProfile(data.user);
+        setProfile({
+          ...data.user,
+          bio: data.user.bio || '',
+          followers: data.user.followers || 0,
+          following: data.user.following || 0,
+          observationCount: data.user.observationCount || 0,
+          validatedSpecies: data.user.validatedSpecies || 0,
+          validatedIdentifications: data.user.validatedIdentifications || 0
+        });
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
@@ -107,11 +115,24 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
                   {ratingInfo.level}
                 </Badge>
               </div>
-              <p className="text-gray-600 mb-4">{profile.email}</p>
-              <div className="flex gap-4 text-sm text-gray-600">
+              <p className="text-gray-600 mb-2">{profile.email}</p>
+              
+              {profile.bio && (
+                <p className="text-gray-700 mb-3">{profile.bio}</p>
+              )}
+              
+              <div className="flex gap-6 text-sm text-gray-600 mb-4">
                 <div>
                   <span className="font-medium">Member since:</span>{' '}
                   {new Date(profile.createdAt).toLocaleDateString()}
+                </div>
+                <div>
+                  <span className="font-medium text-gray-900">{profile.followers}</span>{' '}
+                  Followers
+                </div>
+                <div>
+                  <span className="font-medium text-gray-900">{profile.following}</span>{' '}
+                  Following
                 </div>
               </div>
             </div>
@@ -123,29 +144,26 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Award className="h-5 w-5 text-green-600" />
-              Rating Score
+              <Camera className="h-5 w-5 text-blue-600" />
+              Observations
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl">{profile.rating || 0}</p>
-            <p className="text-sm text-gray-600 mt-2">
-              Earn points by having your identifications verified
-            </p>
+            <p className="text-3xl">{profile.observationCount}</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
-              <Camera className="h-5 w-5 text-blue-600" />
-              Observations
+              <Award className="h-5 w-5 text-green-600" />
+              Species
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl">{profile.observationCount || 0}</p>
+            <p className="text-3xl">{profile.validatedSpecies}</p>
             <p className="text-sm text-gray-600 mt-2">
-              Total observations uploaded
+              Validated observation entries
             </p>
           </CardContent>
         </Card>
@@ -154,24 +172,23 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-green-600" />
-              Contributions
+              Identifications
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl">{profile.contributions || 0}</p>
+            <p className="text-3xl">{profile.validatedIdentifications}</p>
             <p className="text-sm text-gray-600 mt-2">
-              Total community contributions
+              Validated suggested IDs
             </p>
           </CardContent>
         </Card>
       </div>
 
-      
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Award className="h-5 w-5" />
-            Rating System
+            Expertise Level & Rating System
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -214,7 +231,6 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
           </div>
         </CardContent>
       </Card>
-      
 
       <div className="mt-6 p-6 bg-blue-50 rounded-lg border border-blue-200">
         <h3 className="font-semibold mb-2">How to Increase Your Rating</h3>
