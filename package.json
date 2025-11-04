@@ -8,6 +8,7 @@
     "typecheck": "cd frontend && npx tsc --noEmit"
   },
   "devDependencies": {
+    "plantuml": "^0.0.2",
     "typescript": "^5.9.3"
   }
 }
