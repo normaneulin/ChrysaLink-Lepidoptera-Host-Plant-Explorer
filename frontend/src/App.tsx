@@ -163,7 +163,7 @@ export default function App() {
 
           <Route path="/profile">
             {isLoggedIn && accessToken ? (
-              <ProfilePage accessToken={accessToken} />
+              <ProfilePage accessToken={accessToken} userId={userId || ''} />
             ) : (
               <AuthPage onAuthSuccess={handleAuthSuccess} />
             )}

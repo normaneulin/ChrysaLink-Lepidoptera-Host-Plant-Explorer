@@ -262,6 +262,38 @@ class FrontendApiClient {
       };
     }
   }
+
+  /**
+   * Get current user's profile
+   */
+  async getProfile(userId: string): Promise<ApiResponse> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Profile fetch error:', error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: data || {},
+      };
+    } catch (error: any) {
+      console.error('Exception in getProfile:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch profile',
+      };
+    }
+  }
 }
 
 export const apiClient = new FrontendApiClient();
