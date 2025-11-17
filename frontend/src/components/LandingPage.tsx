@@ -40,7 +40,7 @@ export function LandingPage() {
 
         {/* Hero Image Grid */}
         <div className="max-w-6xl mx-auto mb-20">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:grid-rows-2">
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)' }}>
             {shuffledImages.map((image, index) => (
               <div key={index} className="aspect-square overflow-hidden rounded-lg shadow-md hover:shadow-lg transition-shadow">
                 <img
