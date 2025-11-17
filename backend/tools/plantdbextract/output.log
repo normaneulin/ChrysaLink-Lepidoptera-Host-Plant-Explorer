@@ -1,0 +1,72 @@
+Reading HTML from: C:\Software Projects\ChrysaLink\ChrysaLink-Lepidoptera-Host-Plant-Explorer\backend\tools\plantdbextract\Plants_in_the_Philippines.html
+Extracting plants from family: Aspleniaceae
+Found 63 plant records
+
+[OK] TSV exported to: C:\Software Projects\ChrysaLink\ChrysaLink-Lepidoptera-Host-Plant-Explorer\backend\tools\plantdbextract\EXTRACTION_RESULTS_PLANTS.tsv
+
+================================================================================
+EXTRACTED PLANTS (family | genus | specific_epithet | subspecific_epithet | common_name | scientific_name | author | year_of_publication)
+================================================================================
+Aspleniaceae	Asplenium	aethiopicum	aethiopicum		Asplenium aethiopicum	(Burm.f.) Bech.	1935
+Aspleniaceae	Asplenium	affine			Asplenium affine	Sw.	1909
+Aspleniaceae	Asplenium	amboinense			Asplenium amboinense	Willd.	1810
+Aspleniaceae	Asplenium	anguineum			Asplenium anguineum	Christ	1974
+Aspleniaceae	Asplenium	anisodontum			Asplenium anisodontum	C.Presl	1851
+Aspleniaceae	Asplenium	apoense			Asplenium apoense	Copel.	1905
+Aspleniaceae	Asplenium	callipteris			Asplenium callipteris	FΘe	1850
+Aspleniaceae	Asplenium	colubrinum			Asplenium colubrinum	Christ	1906
+Aspleniaceae	Asplenium	crinicaule			Asplenium crinicaule	Hance	
+Aspleniaceae	Asplenium	cuneatum			Asplenium cuneatum	Lam.	
+Aspleniaceae	Asplenium	cymbifolium			Asplenium cymbifolium	Christ	1906
+Aspleniaceae	Asplenium	elmeri			Asplenium elmeri	Christ	1907
+Aspleniaceae	Asplenium	exiguum			Asplenium exiguum	Bedd.	1863
+Aspleniaceae	Asplenium	griseum			Asplenium griseum	Copel.	1905
+Aspleniaceae	Asplenium	haenkei			Asplenium haenkei	Copel.	1825
+Aspleniaceae	Asplenium	horridum			Asplenium horridum	Kaulf.	1824
+Aspleniaceae	Asplenium	insiticium			Asplenium insiticium	Brack.	1854
+Aspleniaceae	Asplenium	laciniatum	fraser-jenkinsii		Asplenium laciniatum	D.Don	1825
+Aspleniaceae	Asplenium	laserpitiifolium			Asplenium laserpitiifolium	Lam.	1828
+Aspleniaceae	Asplenium	lepturus			Asplenium lepturus	J.Sm. ex C.Presl	1851
+Aspleniaceae	Asplenium	lobulatum			Asplenium lobulatum	Mett.	1869
+Aspleniaceae	Asplenium	longissimum			Asplenium longissimum	Blume	1828
+Aspleniaceae	Asplenium	macrophyllum			Asplenium macrophyllum	Sw.	
+Aspleniaceae	Asplenium	mantalingahanum			Asplenium mantalingahanum	P.M.Zamora & Co	1980
+Aspleniaceae	Asplenium	militare			Asplenium militare	Copel.	
+Aspleniaceae	Asplenium	musifolium			Asplenium musifolium	Mett.	1859
+Aspleniaceae	Asplenium	nidus			Asplenium nidus	L.	1753
+Aspleniaceae	Asplenium	nigrescens			Asplenium nigrescens	Blume	1828
+Aspleniaceae	Asplenium	normale			Asplenium normale	D.Don	1825
+Aspleniaceae	Asplenium	oxyphyllum			Asplenium oxyphyllum	J.Sm. ex Kunze	1851
+Aspleniaceae	Asplenium	pahlii			Asplenium pahlii	Salgado	2021
+Aspleniaceae	Asplenium	pellucidum			Asplenium pellucidum	Lam.	
+Aspleniaceae	Asplenium	perplexum			Asplenium perplexum	Salgado	2005
+Aspleniaceae	Asplenium	persicifolium			Asplenium persicifolium	J.Sm. ex Mett.	1856
+Aspleniaceae	Asplenium	phyllitidis			Asplenium phyllitidis	D.Don	1825
+Aspleniaceae	Asplenium	scandens			Asplenium scandens	J.Sm. ex Houlston & T.Moore	1851
+Aspleniaceae	Asplenium	schizocarpum			Asplenium schizocarpum	(Copel.) Copel.	
+Aspleniaceae	Asplenium	scolopendrioides			Asplenium scolopendrioides	J.Sm. ex Hook.	1854
+Aspleniaceae	Asplenium	setisectum			Asplenium setisectum	Blume	1828
+Aspleniaceae	Asplenium	stantoni			Asplenium stantoni	Copel.	
+Aspleniaceae	Asplenium	steerei			Asplenium steerei	Harr.	1877
+Aspleniaceae	Asplenium	tenerum			Asplenium tenerum	G.Forst.	1786
+Aspleniaceae	Asplenium	tenuifolium			Asplenium tenuifolium	D.Don	1825
+Aspleniaceae	Asplenium	thunbergii			Asplenium thunbergii	Kunze	1836
+Aspleniaceae	Asplenium	truncatilobum			Asplenium truncatilobum	(C.Presl) FΘe	1852
+Aspleniaceae	Asplenium	vittaeforme			Asplenium vittaeforme	Cav.	1828
+Aspleniaceae	Asplenium	vulcanicum			Asplenium vulcanicum	Blume	1828
+Aspleniaceae	Asplenium	yoshinagae	austroindicum		Asplenium yoshinagae	Makino	1900
+Aspleniaceae	Asplenium	yoshinagae	indicum		Asplenium yoshinagae	Makino	1900
+Aspleniaceae	Asplenium	powellii			Asplenium powellii	Baker	
+Aspleniaceae	Asplenium	serricula			Asplenium serricula	FΘe	1852
+Aspleniaceae	Asplenium	fibrilliferum			Asplenium fibrilliferum	Alderw.	1920
+Aspleniaceae	Asplenium	polyodon			Asplenium polyodon	G.Forst.	1786
+Aspleniaceae	Hymenasplenium	adiantifrons			Hymenasplenium adiantifrons	(Hayata) Viane & S.Y.Dong	2013
+Aspleniaceae	Hymenasplenium	cheilosorum			Hymenasplenium cheilosorum	(Kunze ex Mett.) Tagawa	1938
+Aspleniaceae	Hymenasplenium	excisum			Hymenasplenium excisum	(C.Presl) S.Linds.	2009
+Aspleniaceae	Hymenasplenium	filipes			Hymenasplenium filipes	(Copel.) Sugim.	1966
+Aspleniaceae	Hymenasplenium	obscurum			Hymenasplenium obscurum	(Blume) Tagawa	1938
+Aspleniaceae	Hymenasplenium	ofeliae			Hymenasplenium ofeliae	(Salgado) Barcelona & Pelser	2021
+Aspleniaceae	Hymenasplenium	subnormale			Hymenasplenium subnormale	(Copel.) Nakaike	1992
+Aspleniaceae	Hymenasplenium	obliquissimum			Hymenasplenium obliquissimum	(Hayata) Sugim.	1966
+Aspleniaceae	Hymenasplenium	pubirhizoma			Hymenasplenium pubirhizoma	(Ching & Z.Y.Liu) K.W.Xu & Li Bing Zhang	2018
+Aspleniaceae	Hymenasplenium	unilaterale			Hymenasplenium unilaterale	(Lam.) Hayata	

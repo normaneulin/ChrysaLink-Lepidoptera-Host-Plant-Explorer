@@ -5,14 +5,11 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { getSupabaseClient, ensureProfileForUser } from '../utils/supabase/client';
 import { toast } from 'sonner';
-
-const supabase = getSupabaseClient();
+import { authService } from '../services/auth-service';
 
 interface AuthPageProps {
-  onAuthSuccess: (accessToken: string) => void;
+  onAuthSuccess: (accessToken: string, userId: string) => void;
 }
 
 export function AuthPage({ onAuthSuccess }: AuthPageProps) {
@@ -29,35 +26,15 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
     const name = formData.get('name') as string;
 
     try {
-      const response = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${publicAnonKey}`
-        },
-        body: JSON.stringify({ email, password, name })
-      });
+      const response = await authService.signUp({ email, password, name });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to sign up');
+      if (response.error) {
+        throw new Error(response.error);
       }
 
-      // Now sign in
-      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      if (signInError) throw signInError;
-
-      if (signInData.session?.access_token) {
-        onAuthSuccess(signInData.session.access_token);
-        // ensure profile exists for this user
-        await ensureProfileForUser(signInData.user);
+      if (response.accessToken && response.user) {
+        onAuthSuccess(response.accessToken, response.user.id);
         toast.success('Account created successfully!');
-        // After signup take the user to the Home page ("/") instead of Explore
         setLocation('/');
       }
     } catch (error: any) {
@@ -77,24 +54,15 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
     const password = formData.get('password') as string;
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      const response = await authService.signIn({ email, password });
 
-      if (error) {
-        if (error.message.includes('Invalid login credentials')) {
-          throw new Error('Invalid email or password. Please check your credentials or sign up for a new account.');
-        }
-        throw error;
+      if (response.error) {
+        throw new Error(response.error);
       }
 
-      if (data.session?.access_token) {
-        onAuthSuccess(data.session.access_token);
-        // ensure profile exists when signing in
-        await ensureProfileForUser(data.user);
+      if (response.accessToken && response.user) {
+        onAuthSuccess(response.accessToken, response.user.id);
         toast.success('Signed in successfully!');
-        // After sign in take the user to the Home page ("/")
         setLocation('/');
       }
     } catch (error: any) {

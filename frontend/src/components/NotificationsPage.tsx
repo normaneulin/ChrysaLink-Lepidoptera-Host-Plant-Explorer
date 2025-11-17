@@ -5,8 +5,8 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
 import { Bell, MessageSquare, CheckCircle, Award } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { toast } from 'sonner';
+import { apiClient } from '../api/client';
 
 interface Notification {
   id: string;
@@ -34,19 +34,13 @@ export function NotificationsPage({ accessToken }: NotificationsPageProps) {
   const fetchNotifications = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/notifications`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
+      const response = await apiClient.get(
+        '/notifications',
+        accessToken
       );
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setNotifications(data.notifications || []);
+      if (response.success) {
+        setNotifications(response.data || []);
       }
     } catch (error) {
       console.error('Error fetching notifications:', error);
@@ -58,14 +52,10 @@ export function NotificationsPage({ accessToken }: NotificationsPageProps) {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/notifications/${notificationId}/read`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
+      const response = await apiClient.post(
+        `/notifications/${notificationId}/read`,
+        {},
+        accessToken
       );
 
       if (response.ok) {

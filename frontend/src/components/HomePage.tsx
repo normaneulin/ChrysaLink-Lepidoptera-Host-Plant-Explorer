@@ -7,9 +7,8 @@ import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { Search } from 'lucide-react';
 import { ObservationDetailModal } from './ObservationDetailModal';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { toast } from 'sonner';
-import { getSupabaseClient } from '../utils/supabase/client';
+import { apiClient } from '../api/client';
 
 export function HomePage({ accessToken, userId }: { accessToken?: string | null; userId?: string | null }) {
   const [observations, setObservations] = useState<any[]>([]);
@@ -28,50 +27,23 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
   const fetchFeed = async () => {
     setIsLoading(true);
     try {
-      // Try serverless function first
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations?limit=20`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-          }
-        }
-      );
+      // Try backend API first, fallback to direct Supabase query
+      let response = await apiClient.get('/observations?limit=20', accessToken || undefined);
 
-      if (response.ok) {
-        const data = await response.json();
-        setObservations(data.observations || []);
-        return;
+      // If backend fails, use fallback Supabase query
+      if (!response.success) {
+        console.log('Backend unavailable, using fallback Supabase query...');
+        response = await apiClient.getObservations();
       }
 
-      // If serverless fails, fetch directly from Supabase KV store
-      console.log('Serverless function unavailable, fetching from KV store...');
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('kv_store_b55216b3')
-        .select('value')
-        .like('key', 'obs:%');
-
-      if (error) {
-        console.error('Error fetching from KV:', error);
-        return;
+      if (response.success) {
+        setObservations(response.data || []);
+      } else {
+        toast.error('Failed to load observations');
       }
-
-      // Parse the KV store values
-      const obs = data
-        ?.map((item: any) => {
-          try {
-            return typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
-          } catch (e) {
-            console.error('Error parsing observation:', e);
-            return null;
-          }
-        })
-        .filter(Boolean) || [];
-
-      setObservations(obs);
     } catch (error) {
       console.error('Error fetching feed:', error);
+      toast.error('Error loading observations');
     } finally {
       setIsLoading(false);
     }
@@ -95,12 +67,11 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
       return;
     }
     try {
-      const res = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/species/search?q=${encodeURIComponent(q)}&type=lepidoptera`,
-        { headers: { 'Authorization': `Bearer ${publicAnonKey}` } }
-      );
-      const d = await res.json();
-      setSpeciesResults(d.species || []);
+      const response = await apiClient.searchSpecies(q, 'lepidoptera');
+      
+      if (response.success) {
+        setSpeciesResults(response.data || []);
+      }
     } catch (err) {
       console.error('Species search error', err);
     }
@@ -117,20 +88,16 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
     }
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations/${obsId}/identifications`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({ species: suggestText, caption: suggestCaption })
-        }
+      const response = await apiClient.post(
+        `/observations/${obsId}/identifications`,
+        { species: suggestText, caption: suggestCaption },
+        accessToken
       );
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Failed to suggest id');
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to suggest id');
+      }
+
       toast.success('Suggestion sent');
       setSuggestingFor(null);
       // refresh feed
@@ -147,6 +114,12 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
 
       {isLoading ? (
         <p>Loading...</p>
+      ) : observations.length === 0 ? (
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-center text-gray-500">No observations found. Be the first to document a Lepidoptera-plant interaction!</p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-4">
           {observations.map((obs) => (
@@ -154,9 +127,10 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
               <CardContent>
                 <div className="flex gap-4">
                   <div className="w-28">
-                    <img src={obs.lepidoptera.image} alt="lep" className="w-full h-24 object-cover rounded" />
-                    {obs.hostPlant.image && (
-                      <img src={obs.hostPlant.image} alt="plant" className="w-full h-24 object-cover rounded mt-2" />
+                    {obs.image_url ? (
+                      <img src={obs.image_url} alt="observation" className="w-full h-24 object-cover rounded" />
+                    ) : (
+                      <div className="w-full h-24 bg-gray-200 rounded flex items-center justify-center">No image</div>
                     )}
                   </div>
 
@@ -168,51 +142,17 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
                         </Avatar>
                         <div>
                           <p className="font-medium">{obs.user?.name || 'Unknown'}</p>
-                          <p className="text-xs text-gray-500">{new Date(obs.createdAt).toLocaleString()}</p>
+                          <p className="text-xs text-gray-500">{obs.created_at ? new Date(obs.created_at).toLocaleString() : 'N/A'}</p>
                         </div>
-                      </div>
-                      <div>
-                        <Badge className="text-sm">{obs.lepidoptera.species || 'Unknown'}</Badge>
                       </div>
                     </div>
 
-                    <p className="text-sm text-gray-700 mt-2 line-clamp-2">{obs.notes}</p>
+                    <p className="text-sm font-medium mt-2">📍 {obs.location || 'Unknown location'}</p>
+                    <p className="text-sm text-gray-700 mt-2 line-clamp-2">{obs.notes || 'No notes'}</p>
 
                     <div className="flex gap-2 mt-3">
-                      {/* Card click opens details; buttons below must stop propagation so they don't trigger the card click */}
-                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleStartSuggest(obs.id); }}>Suggest ID</Button>
-                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setSelectedObs(obs); setShowModal(true); }}>Comment</Button>
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleStartSuggest(obs.id); }}>View Details</Button>
                     </div>
-
-                    {suggestingFor === obs.id && (
-                      <div className="mt-3 space-y-2">
-                        <div className="flex items-center gap-2">
-                          <Input
-                            placeholder="Search species or type scientific name"
-                            value={suggestText}
-                            onChange={(e: any) => { setSuggestText(e.target.value); searchSpecies(e.target.value); }}
-                          />
-                          <Button size="sm" onClick={() => submitSuggestion(obs.id)}>Send</Button>
-                          <Button size="sm" variant="outline" onClick={() => setSuggestingFor(null)}>Cancel</Button>
-                        </div>
-                        {speciesResults.length > 0 && (
-                          <div className="grid grid-cols-2 gap-2">
-                            {speciesResults.slice(0, 6).map((s: any) => (
-                              <button
-                                key={s.id}
-                                className="text-left p-2 bg-gray-50 rounded"
-                                onClick={() => setSuggestText(s.name)}
-                              >
-                                <div className="font-medium">{s.name}</div>
-                                {s.commonName && <div className="text-xs text-gray-500">{s.commonName}</div>}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        <Textarea placeholder="Add caption for your suggestion (optional)" value={suggestCaption} onChange={(e: any) => setSuggestCaption(e.target.value)} rows={2} />
-                      </div>
-                    )}
                   </div>
                 </div>
               </CardContent>

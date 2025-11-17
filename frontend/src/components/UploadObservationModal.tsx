@@ -6,9 +6,10 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Upload, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
+import { apiClient } from '../api/client';
+import { createClient } from '@supabase/supabase-js';
 
 interface UploadObservationModalProps {
   isOpen: boolean;
@@ -50,21 +51,17 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
 
   const searchSpecies = async (query: string, type: 'lepidoptera' | 'plant') => {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/species/search?q=${encodeURIComponent(query)}&type=${type}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-          }
-        }
+      const response = await apiClient.get(
+        `/species/search?q=${encodeURIComponent(query)}&type=${type}`,
+        accessToken
       );
 
-      const data = await response.json();
-      
-      if (type === 'lepidoptera') {
-        setLepidopteraSuggestions(data.species || []);
-      } else {
-        setHostPlantSuggestions(data.species || []);
+      if (response.success) {
+        if (type === 'lepidoptera') {
+          setLepidopteraSuggestions(response.data || []);
+        } else {
+          setHostPlantSuggestions(response.data || []);
+        }
       }
     } catch (error) {
       console.error('Error searching species:', error);
@@ -110,15 +107,40 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
     setIsLoading(true);
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations`,
+      // Try backend API first
+      let response = await apiClient.post(
+        '/observations',
         {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({
+          lepidopteraImage,
+          lepidopteraSpecies,
+          hostPlantImage,
+          hostPlantSpecies,
+          date,
+          location,
+          latitude: latitude ? parseFloat(latitude) : null,
+          longitude: longitude ? parseFloat(longitude) : null,
+          notes
+        },
+        accessToken
+      );
+
+      // If backend fails, use fallback Supabase method
+      if (!response.success) {
+        console.log('Backend unavailable, using fallback Supabase query...');
+        
+        // Get current user ID from Supabase auth
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 
+          `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
+        const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.id) {
+          throw new Error('User not authenticated');
+        }
+
+        response = await apiClient.createObservation(
+          {
             lepidopteraImage,
             lepidopteraSpecies,
             hostPlantImage,
@@ -128,14 +150,13 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
             latitude: latitude ? parseFloat(latitude) : null,
             longitude: longitude ? parseFloat(longitude) : null,
             notes
-          })
-        }
-      );
+          },
+          user.id
+        );
+      }
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create observation');
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to create observation');
       }
 
       toast.success('Observation uploaded successfully!');

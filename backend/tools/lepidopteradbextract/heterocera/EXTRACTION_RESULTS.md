@@ -1,0 +1,18 @@
+| Family | Subfamily | Tribe | Genus | Specific Epithet | Subspecific Epithet | Common Name | Scientific Name | Author | Year |
+|--------|-----------|-------|-------|------------------|---------------------|-------------|-----------------|--------|------|
+| Erebidae | Anobinae |  | Plecoptera | sp. |  |  | Plecoptera sp. |  |  |
+| Erebidae | Eulepidotinae | Panopodini | Anticarsia | irrorata |  |  | Anticarsia irrorata |  |  |
+| Erebidae | Hypenodinae |  | Luceria | bakeri |  |  | Luceria bakeri |  |  |
+| Erebidae | Hypenodinae | Micronoctuini | Mimachrostia | sp. |  |  | Mimachrostia sp. |  |  |
+| Erebidae | Hypocalinae |  | Hypocala | rostrata |  |  | Hypocala rostrata |  |  |
+| Erebidae | Hypocalinae |  | Hypocala | sp. |  |  | Hypocala sp. |  |  |
+| Erebidae | Hypocalinae |  | Hypocala | violacea |  |  | Hypocala violacea |  |  |
+| Erebidae | Pangraptinae |  | Bematha | extensa |  |  | Bematha extensa | Walker | 1865 |
+| Erebidae | Pangraptinae |  | Egnasia | sp. |  |  | Egnasia sp. |  |  |
+| Erebidae | Pangraptinae |  | Pangrapta | sp. |  |  | Pangrapta sp. |  |  |
+| Erebidae | Rivulinae |  | Bocula | calthula |  |  | Bocula calthula |  |  |
+| Erebidae | Rivulinae |  | Bocula | sp. |  |  | Bocula sp. |  |  |
+| Erebidae | Rivulinae |  | Rivula | sp. |  |  | Rivula sp. |  |  |
+| Erebdae | Rivulinae |  | Rivula | sp. |  |  | Rivula sp. |  |  |
+| Erebidae | Scoliopteryginae |  | Xanthanomis | aurantiaca |  |  | Xanthanomis aurantiaca |  |  |
+| Erebidae | Toxocampinae | Toxocampini | Pantydia | metaspila |  |  | Pantydia metaspila |  |  |

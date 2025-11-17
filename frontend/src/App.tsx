@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Route, Switch, useLocation } from 'wouter';
+import { createClient } from '@supabase/supabase-js';
 import { Navbar } from './components/Navbar';
 import { LandingPage } from './components/LandingPage';
 import HomePage from './components/HomePage';
@@ -12,11 +13,9 @@ import { UploadObservationModal } from './components/UploadObservationModal';
 import { Button } from './components/ui/button';
 import { Plus } from 'lucide-react';
 import { Toaster } from './components/ui/sonner';
-import { projectId, publicAnonKey } from './utils/supabase/info';
-import { getSupabaseClient } from './utils/supabase/client';
 import { toast } from 'sonner';
-
-const supabase = getSupabaseClient();
+import { apiClient } from './api/client';
+import { authService } from './services/auth-service';
 
 export default function App() {
   const [location, setLocation] = useLocation();
@@ -42,11 +41,20 @@ export default function App() {
 
   const checkSession = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        setAccessToken(session.access_token);
-        const { data: { user } } = await supabase.auth.getUser(session.access_token);
-        setUserId(user?.id || null);
+      // Check if user is logged in with Supabase Auth
+      const user = await authService.getCurrentUser();
+      if (user) {
+        // Get the current session to get the access token
+        const { data: { session } } = await createClient(
+          import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`,
+          import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+        ).auth.getSession();
+        
+        if (session?.access_token) {
+          setAccessToken(session.access_token);
+          setUserId(user.id);
+          localStorage.setItem('accessToken', session.access_token);
+        }
       }
     } catch (error) {
       console.error('Session check error:', error);
@@ -57,19 +65,10 @@ export default function App() {
     if (!accessToken) return;
 
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/notifications`,
-        {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        }
-      );
+      const response = await apiClient.get('/notifications', accessToken);
 
-      const data = await response.json();
-
-      if (response.ok) {
-        const unreadCount = data.notifications?.filter((n: any) => !n.read).length || 0;
+      if (response.success) {
+        const unreadCount = response.data?.filter((n: any) => !n.read).length || 0;
         setNotificationCount(unreadCount);
       }
     } catch (error) {
@@ -77,18 +76,23 @@ export default function App() {
     }
   };
 
-  const handleAuthSuccess = (token: string) => {
+  const handleAuthSuccess = (token: string, userId: string) => {
     setAccessToken(token);
-    supabase.auth.getUser(token).then(({ data: { user } }) => {
-      setUserId(user?.id || null);
-    });
+    setUserId(userId);
+    localStorage.setItem('accessToken', token);
+    localStorage.setItem('userId', userId);
+    setLocation('/home');
   };
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      if (accessToken) {
+        await authService.signOut(accessToken);
+      }
       setAccessToken(null);
       setUserId(null);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('userId');
       setLocation('/');
       toast.success('Logged out successfully');
     } catch (error) {

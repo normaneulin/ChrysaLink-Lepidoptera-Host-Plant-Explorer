@@ -4,10 +4,7 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Skeleton } from './ui/skeleton';
 import { User, Award, TrendingUp, Camera } from 'lucide-react';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
-import { getSupabaseClient } from '../utils/supabase/client';
-
-const supabase = getSupabaseClient();
+import { apiClient } from '../api/client';
 
 interface ProfilePageProps {
   accessToken: string;
@@ -24,33 +21,20 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
   const fetchProfile = async () => {
     setIsLoading(true);
     try {
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser(accessToken);
-      
-      if (!user) {
-        throw new Error('User not found');
-      }
-
       // Fetch user profile with all details
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/users/${user.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-          }
-        }
+      const response = await apiClient.get(
+        `/profile`,
+        accessToken
       );
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (response.success) {
         setProfile({
-          ...data.user,
-          bio: data.user.bio || '',
-          followers: data.user.followers || 0,
-          following: data.user.following || 0,
-          observationCount: data.user.observationCount || 0,
-          validatedSpecies: data.user.validatedSpecies || 0,
+          ...response.data,
+          bio: response.data?.bio || '',
+          followers: response.data?.followers || 0,
+          following: response.data?.following || 0,
+          observationCount: response.data?.observationCount || 0,
+          validatedSpecies: response.data?.validatedSpecies || 0,
           validatedIdentifications: data.user.validatedIdentifications || 0
         });
       }
