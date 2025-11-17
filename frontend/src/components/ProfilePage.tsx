@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
+import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Skeleton } from './ui/skeleton';
 import { User, Award, TrendingUp, Camera } from 'lucide-react';
@@ -8,40 +9,82 @@ import { apiClient } from '../api/client';
 
 interface ProfilePageProps {
   accessToken: string;
+  userId?: string;
 }
 
-export function ProfilePage({ accessToken }: ProfilePageProps) {
+export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
   const [profile, setProfile] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchProfile();
-  }, []);
+    if (userId) {
+      fetchProfile();
+    }
+  }, [userId]);
 
   const fetchProfile = async () => {
     setIsLoading(true);
     try {
-      // Fetch user profile with all details
-      const response = await apiClient.get(
-        `/profile`,
-        accessToken
-      );
+      // Fetch user profile directly from Supabase
+      const response = await apiClient.getProfile(userId || '');
 
-      if (response.success) {
+      if (response.success && response.data) {
         setProfile({
           ...response.data,
           bio: response.data?.bio || '',
           followers: response.data?.followers || 0,
           following: response.data?.following || 0,
-          observationCount: response.data?.observationCount || 0,
-          validatedSpecies: response.data?.validatedSpecies || 0,
-          validatedIdentifications: response.data?.validatedIdentifications || 0
+          observationCount: response.data?.observation_count || 0,
+          validatedSpecies: response.data?.validated_species || 0,
+          validatedIdentifications: response.data?.validated_identifications || 0,
+          createdAt: response.data?.created_at
         });
+      } else if (response.error && userId) {
+        console.error('Profile fetch failed:', response.error);
+        // Try to create profile if it doesn't exist
+        await createProfileIfNotExists();
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const createProfileIfNotExists = async () => {
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      const supabase = createClient(
+        import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`,
+        import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+      );
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          name: 'User',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating profile:', error);
+      } else {
+        console.log('Profile created:', data);
+        setProfile({
+          ...data,
+          bio: data?.bio || '',
+          followers: data?.followers || 0,
+          following: data?.following || 0,
+          observationCount: data?.observation_count || 0,
+          validatedSpecies: data?.validated_species || 0,
+          validatedIdentifications: data?.validated_identifications || 0,
+          createdAt: data?.created_at
+        });
+      }
+    } catch (error) {
+      console.error('Exception creating profile:', error);
     }
   };
 
@@ -64,8 +107,14 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-gray-500">Profile not found</p>
+          <CardContent className="py-12">
+            <div className="text-center space-y-4">
+              <p className="text-gray-500">Profile not found</p>
+              <p className="text-sm text-gray-400">UserId: {userId}</p>
+              <Button onClick={fetchProfile} variant="outline">
+                Retry
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

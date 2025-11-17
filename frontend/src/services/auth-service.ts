@@ -59,12 +59,18 @@ class AuthService {
       // Create user profile
       if (authData.user) {
         try {
-          await supabase.from('profiles').insert({
+          const { error: profileError } = await supabase.from('profiles').insert({
             id: authData.user.id,
             name: data.name,
           });
+          
+          if (profileError) {
+            console.error('Profile creation error:', profileError);
+          } else {
+            console.log('Profile created successfully for user:', authData.user.id);
+          }
         } catch (profileError) {
-          console.error('Profile creation error:', profileError);
+          console.error('Profile creation exception:', profileError);
           // Continue even if profile creation fails
         }
       }
