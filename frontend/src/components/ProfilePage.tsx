@@ -35,7 +35,7 @@ export function ProfilePage({ accessToken }: ProfilePageProps) {
           following: response.data?.following || 0,
           observationCount: response.data?.observationCount || 0,
           validatedSpecies: response.data?.validatedSpecies || 0,
-          validatedIdentifications: data.user.validatedIdentifications || 0
+          validatedIdentifications: response.data?.validatedIdentifications || 0
         });
       }
     } catch (error) {

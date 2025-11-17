@@ -58,12 +58,15 @@ class AuthService {
 
       // Create user profile
       if (authData.user) {
-        await supabase.from('profiles').insert({
-          id: authData.user.id,
-          email: data.email,
-          name: data.name,
-          created_at: new Date().toISOString(),
-        }).select().single();
+        try {
+          await supabase.from('profiles').insert({
+            id: authData.user.id,
+            name: data.name,
+          });
+        } catch (profileError) {
+          console.error('Profile creation error:', profileError);
+          // Continue even if profile creation fails
+        }
       }
 
       return {
