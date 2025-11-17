@@ -1,0 +1,14 @@
+{
+  "imports": {
+    "hono": "npm:hono@latest",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@latest"
+  },
+  "tasks": {
+    "dev": "deno run --allow-all --watch index.ts",
+    "deploy": "supabase functions deploy make-server-b55216b3"
+  },
+  "compilerOptions": {
+    "lib": ["deno.window"],
+    "strict": true
+  }
+}

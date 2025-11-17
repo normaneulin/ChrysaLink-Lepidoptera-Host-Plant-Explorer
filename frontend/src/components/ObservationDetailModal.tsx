@@ -7,9 +7,8 @@ import { Badge } from './ui/badge';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { MapPin, Calendar, CheckCircle, MessageSquare } from 'lucide-react';
 import { toast } from 'sonner';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { Separator } from './ui/separator';
-import { getSupabaseClient } from '../utils/supabase/client';
+import { apiClient } from '../api/client';
 
 interface ObservationDetailModalProps {
   observation: any;
@@ -53,35 +52,17 @@ export function ObservationDetailModal({
 
   const handleAddComment = async () => {
     if (!comment.trim() || !accessToken) return;
-    if (!comment.trim() || !accessToken) {
-      return;
-    }
 
     setIsSubmitting(true);
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations/${observation.id}/comments`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify({ text: comment })
-        }
+      const response = await apiClient.post(
+        `/observations/${observation.id}/comments`,
+        { text: comment },
+        accessToken
       );
 
-      const text = await response.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch (e) {
-        data = text;
-      }
-
-      if (!response.ok) {
-        const msg = data && typeof data === 'object' && data.error ? data.error : (typeof data === 'string' && data.length ? data : 'Failed to add comment');
-        throw new Error(msg);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to add comment');
       }
 
       toast.success('Comment added!');
@@ -100,19 +81,13 @@ export function ObservationDetailModal({
 
   const fetchObservationDetails = async () => {
     try {
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations/${observation.id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
-          }
-        }
+      const response = await apiClient.get(
+        `/observations/${observation.id}`,
+        accessToken
       );
 
-      const data = await response.json();
-
-      if (response.ok) {
-        setLocalObservation(data.observation);
+      if (response.success) {
+        setLocalObservation(response.data);
       }
     } catch (error) {
       console.error('Error fetching observation details:', error);
@@ -137,17 +112,15 @@ export function ObservationDetailModal({
         date: editValues.date
       };
 
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations/${localObservation.id}`,
-        {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          },
-          body: JSON.stringify(payload)
-        }
+      const response = await apiClient.put(
+        `/observations/${localObservation.id}`,
+        payload,
+        accessToken
       );
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update observation');
+      }
 
       const text = await response.text();
       let data: any = null;

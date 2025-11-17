@@ -14,35 +14,40 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from './ui/dropdown-menu';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
 import { toast } from 'sonner';
 import { ObservationDetailModal } from './ObservationDetailModal';
 import ExploreMap from './ExploreMap';
-import { getSupabaseClient } from '../utils/supabase/client';
+import { apiClient } from '../api/client';
 
 interface Observation {
   id: string;
-  userId: string;
-  lepidoptera: {
-    image: string;
-    species: string;
+  user_id?: string;
+  userId?: string;
+  image_url?: string;
+  lepidoptera?: {
+    image?: string;
+    species?: string;
+    id?: string;
   };
-  hostPlant: {
-    image: string;
-    species: string;
+  hostPlant?: {
+    image?: string;
+    species?: string;
+    id?: string;
   };
-  date: string;
-  location: string;
+  date?: string;
+  location?: string;
   latitude?: number;
   longitude?: number;
-  notes: string;
-  createdAt: string;
+  notes?: string;
+  created_at?: string;
+  createdAt?: string;
   user?: {
     id: string;
     name: string;
   };
   comments?: any[];
   identifications?: any[];
+  [key: string]: any; // Allow for additional fields from Supabase
 }
 
 interface ExplorePageProps {
@@ -71,16 +76,19 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
 
     // Species search filter
     if (searchQuery.trim()) {
-      filtered = filtered.filter(obs => 
-        obs.lepidoptera.species?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        obs.hostPlant.species?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
+      filtered = filtered.filter(obs => {
+        const lepidopteraSpecies = obs.lepidoptera?.species || '';
+        const hostPlantSpecies = obs.hostPlant?.species || '';
+        const searchLower = searchQuery.toLowerCase();
+        return lepidopteraSpecies.toLowerCase().includes(searchLower) ||
+               hostPlantSpecies.toLowerCase().includes(searchLower);
+      });
     }
 
     // Location filter
     if (filterByLocation.trim()) {
       filtered = filtered.filter(obs =>
-        obs.location?.toLowerCase().includes(filterByLocation.toLowerCase())
+        (obs.location || '').toLowerCase().includes(filterByLocation.toLowerCase())
       );
     }
 
@@ -88,8 +96,8 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
     if (filterByUser && filterByUser !== 'all') {
       filtered = filtered.filter(obs =>
         filterByUser === 'mine' 
-          ? obs.userId === userId 
-          : obs.userId !== userId
+          ? (obs.userId || obs.user_id) === userId 
+          : (obs.userId || obs.user_id) !== userId
       );
     }
 
@@ -99,58 +107,25 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
   const fetchObservations = async () => {
     setIsLoading(true);
     try {
-      // Try serverless function first
-      const url = showOnlyUserObservations && userId
-        ? `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations?userId=${userId}`
-        : `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations`;
+      // Try backend API first, fallback to direct Supabase query
+      const query = showOnlyUserObservations && userId ? `?userId=${userId}` : '';
+      let response = await apiClient.get(`/observations${query}`, accessToken || undefined);
 
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${publicAnonKey}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setObservations(data.observations || []);
-        setFilteredObservations(data.observations || []);
-        return;
+      // If backend fails, use fallback Supabase query
+      if (!response.success) {
+        console.log('Backend unavailable, using fallback Supabase query...');
+        response = await apiClient.getObservations();
       }
 
-      // If serverless fails, fetch directly from Supabase KV store
-      console.log('Serverless function unavailable, fetching from KV store...');
-      const supabase = getSupabaseClient();
-      const { data, error } = await supabase
-        .from('kv_store_b55216b3')
-        .select('value')
-        .like('key', 'obs:%');
-
-      if (error) {
-        throw new Error(error.message || 'Failed to fetch observations');
+      if (response.success) {
+        setObservations(response.data || []);
+        setFilteredObservations(response.data || []);
+      } else {
+        toast.error('Failed to load observations');
       }
-
-      // Parse the KV store values
-      let obs = data
-        ?.map((item: any) => {
-          try {
-            return typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
-          } catch (e) {
-            console.error('Error parsing observation:', e);
-            return null;
-          }
-        })
-        .filter(Boolean) || [];
-
-      // Filter by user if needed
-      if (showOnlyUserObservations && userId) {
-        obs = obs.filter((o: any) => o.userId === userId);
-      }
-
-      setObservations(obs);
-      setFilteredObservations(obs);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error fetching observations:', error);
-      toast.error(error.message || 'Failed to load observations');
+      toast.error('Failed to load observations');
     } finally {
       setIsLoading(false);
     }
@@ -169,116 +144,136 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
 
   const GridView = () => (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {filteredObservations.map((obs) => (
-        <Card
-          key={obs.id}
-          className="cursor-pointer hover:shadow-lg transition-shadow"
-          onClick={() => setSelectedObservation(obs)}
-        >
-          <div className="relative h-48">
-            {obs.lepidoptera.image && (
-              <img
-                src={obs.lepidoptera.image}
-                alt={obs.lepidoptera.species || 'Lepidoptera'}
-                className="w-full h-full object-cover rounded-t-lg"
-              />
-            )}
-            {obs.comments && obs.comments.length > 0 && (
-              <Badge className="absolute top-2 right-2">
-                <MessageSquare className="h-3 w-3 mr-1" />
-                {obs.comments.length}
-              </Badge>
-            )}
-          </div>
-          <CardContent className="pt-4">
-            <div className="space-y-2">
-              <div>
-                <p className="text-xs text-gray-500">Lepidoptera</p>
-                <p className="font-medium truncate">{obs.lepidoptera.species || 'Unknown'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Host Plant</p>
-                <p className="text-sm truncate">{obs.hostPlant.species || 'Unknown'}</p>
-              </div>
-              <div className="flex items-center text-xs text-gray-500">
-                <MapPin className="h-3 w-3 mr-1" />
-                <span className="truncate">{obs.location || 'Unknown location'}</span>
-              </div>
-              {obs.user && (
-                <p className="text-xs text-gray-500">by {obs.user.name}</p>
+      {filteredObservations.map((obs) => {
+        const imageUrl = obs.image_url || obs.lepidoptera?.image;
+        const lepidopteraSpecies = obs.lepidoptera?.species || 'Unknown';
+        const hostPlantSpecies = obs.hostPlant?.species || 'Unknown';
+        return (
+          <Card
+            key={obs.id}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => setSelectedObservation(obs)}
+          >
+            <div className="relative h-48 bg-gray-200">
+              {imageUrl && (
+                <img
+                  src={imageUrl}
+                  alt={lepidopteraSpecies}
+                  className="w-full h-full object-cover rounded-t-lg"
+                />
+              )}
+              {!imageUrl && (
+                <div className="w-full h-full flex items-center justify-center text-gray-400">
+                  No image
+                </div>
+              )}
+              {obs.comments && obs.comments.length > 0 && (
+                <Badge className="absolute top-2 right-2">
+                  <MessageSquare className="h-3 w-3 mr-1" />
+                  {obs.comments.length}
+                </Badge>
               )}
             </div>
-          </CardContent>
-        </Card>
-      ))}
+            <CardContent className="pt-4">
+              <div className="space-y-2">
+                <div>
+                  <p className="text-xs text-gray-500">Lepidoptera</p>
+                  <p className="font-medium truncate">{lepidopteraSpecies}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Host Plant</p>
+                  <p className="text-sm truncate">{hostPlantSpecies}</p>
+                </div>
+                <div className="flex items-center text-xs text-gray-500">
+                  <MapPin className="h-3 w-3 mr-1" />
+                  <span className="truncate">{obs.location || 'Unknown location'}</span>
+                </div>
+                {obs.user && (
+                  <p className="text-xs text-gray-500">by {obs.user.name}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 
   const ListView = () => (
     <div className="space-y-4">
-      {filteredObservations.map((obs) => (
-        <Card
-          key={obs.id}
-          className="cursor-pointer hover:shadow-lg transition-shadow"
-          onClick={() => setSelectedObservation(obs)}
-        >
-          <CardContent className="p-4">
-            <div className="flex gap-4">
-              <div className="flex gap-2">
-                {obs.lepidoptera.image && (
-                  <img
-                    src={obs.lepidoptera.image}
-                    alt="Lepidoptera"
-                    className="w-24 h-24 object-cover rounded"
-                  />
-                )}
-                {obs.hostPlant.image && (
-                  <img
-                    src={obs.hostPlant.image}
-                    alt="Host Plant"
-                    className="w-24 h-24 object-cover rounded"
-                  />
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-semibold">{obs.lepidoptera.species || 'Unknown Species'}</h3>
-                    <p className="text-sm text-gray-600">on {obs.hostPlant.species || 'Unknown Host Plant'}</p>
-                  </div>
-                  {obs.comments && obs.comments.length > 0 && (
-                    <Badge variant="secondary">
-                      <MessageSquare className="h-3 w-3 mr-1" />
-                      {obs.comments.length}
-                    </Badge>
+      {filteredObservations.map((obs) => {
+        const lepidopteraImage = obs.lepidoptera?.image;
+        const hostPlantImage = obs.hostPlant?.image;
+        const lepidopteraSpecies = obs.lepidoptera?.species || 'Unknown Species';
+        const hostPlantSpecies = obs.hostPlant?.species || 'Unknown Host Plant';
+        const observationDate = obs.date || obs.created_at;
+        
+        return (
+          <Card
+            key={obs.id}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => setSelectedObservation(obs)}
+          >
+            <CardContent className="p-4">
+              <div className="flex gap-4">
+                <div className="flex gap-2">
+                  {lepidopteraImage && (
+                    <img
+                      src={lepidopteraImage}
+                      alt={lepidopteraSpecies}
+                      className="w-24 h-24 object-cover rounded"
+                    />
+                  )}
+                  {hostPlantImage && (
+                    <img
+                      src={hostPlantImage}
+                      alt={hostPlantSpecies}
+                      className="w-24 h-24 object-cover rounded"
+                    />
                   )}
                 </div>
-                <div className="space-y-1 text-sm text-gray-600">
-                  <div className="flex items-center">
-                    <MapPin className="h-4 w-4 mr-2" />
-                    <span>{obs.location || 'Unknown location'}</span>
-                    {obs.latitude && obs.longitude && (
-                      <span className="ml-2 text-xs">
-                        ({obs.latitude.toFixed(4)}, {obs.longitude.toFixed(4)})
-                      </span>
+                <div className="flex-1">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold">{lepidopteraSpecies}</h3>
+                      <p className="text-sm text-gray-600">on {hostPlantSpecies}</p>
+                    </div>
+                    {obs.comments && obs.comments.length > 0 && (
+                      <Badge variant="secondary">
+                        <MessageSquare className="h-3 w-3 mr-1" />
+                        {obs.comments.length}
+                      </Badge>
                     )}
                   </div>
-                  <div className="flex items-center">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    <span>{new Date(obs.date).toLocaleDateString()}</span>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <div className="flex items-center">
+                      <MapPin className="h-4 w-4 mr-2" />
+                      <span>{obs.location || 'Unknown location'}</span>
+                      {obs.latitude && obs.longitude && (
+                        <span className="ml-2 text-xs">
+                          ({obs.latitude.toFixed(4)}, {obs.longitude.toFixed(4)})
+                        </span>
+                      )}
+                    </div>
+                    {observationDate && (
+                      <div className="flex items-center">
+                        <Calendar className="h-4 w-4 mr-2" />
+                        <span>{new Date(observationDate).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {obs.user && (
+                      <p className="text-xs mt-2">Observed by {obs.user.name}</p>
+                    )}
                   </div>
-                  {obs.user && (
-                    <p className="text-xs mt-2">Observed by {obs.user.name}</p>
+                  {obs.notes && (
+                    <p className="mt-2 text-sm text-gray-700 line-clamp-2">{obs.notes}</p>
                   )}
                 </div>
-                {obs.notes && (
-                  <p className="mt-2 text-sm text-gray-700 line-clamp-2">{obs.notes}</p>
-                )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 

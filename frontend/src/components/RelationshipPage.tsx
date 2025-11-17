@@ -12,7 +12,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from './ui/dropdown-menu';
-import { projectId, publicAnonKey } from '../utils/supabase/info';
+import { apiClient } from '../api/client';
+
+// Environment variables
+const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
+const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
 interface Division {
   id: string;
@@ -90,11 +94,11 @@ export function RelationshipPage() {
       }
 
       const response = await fetch(
-        `https://${projectId}.supabase.co/rest/v1/lepidoptera_taxonomy?select=${query}&${filter}`,
+        `https://${PROJECT_ID}.supabase.co/rest/v1/lepidoptera_taxonomy?select=${query}&${filter}`,
         {
           headers: {
-            'Authorization': `Bearer ${publicAnonKey}`,
-            'apikey': publicAnonKey
+            'Authorization': `Bearer ${ANON_KEY}`,
+            'apikey': ANON_KEY
           }
         }
       );
@@ -132,10 +136,10 @@ export function RelationshipPage() {
         const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),family.is.null,genus.is.null,species.is.null)`;
         
         const response = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
+          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
           {
             headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
+              'Authorization': `Bearer ${ANON_KEY}`,
               'apikey': publicAnonKey
             }
           }
@@ -159,10 +163,10 @@ export function RelationshipPage() {
         const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),family.not.is.null,genus.is.null,species.is.null)`;
         
         const response = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
+          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
           {
             headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
+              'Authorization': `Bearer ${ANON_KEY}`,
               'apikey': publicAnonKey
             }
           }
@@ -186,10 +190,10 @@ export function RelationshipPage() {
         const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),genus.not.is.null,species.is.null)`;
         
         const response = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
+          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
           {
             headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
+              'Authorization': `Bearer ${ANON_KEY}`,
               'apikey': publicAnonKey
             }
           }
@@ -213,10 +217,10 @@ export function RelationshipPage() {
         const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),species.not.is.null)`;
         
         const response = await fetch(
-          `https://${projectId}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
+          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
           {
             headers: {
-              'Authorization': `Bearer ${publicAnonKey}`,
+              'Authorization': `Bearer ${ANON_KEY}`,
               'apikey': publicAnonKey
             }
           }
@@ -237,10 +241,10 @@ export function RelationshipPage() {
     try {
       // Fetch relationships
       const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/relationships`,
+        `https://${PROJECT_ID}.supabase.co/functions/v1/make-server-b55216b3/relationships`,
         {
           headers: {
-            'Authorization': `Bearer ${publicAnonKey}`
+            'Authorization': `Bearer ${ANON_KEY}`
           }
         }
       );

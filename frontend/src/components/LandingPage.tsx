@@ -2,8 +2,25 @@ import { Link } from 'wouter';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Search, Map, Users, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export function LandingPage() {
+  const [shuffledImages, setShuffledImages] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Create array of image numbers 1-12
+    const images = Array.from({ length: 12 }, (_, i) => `image${i + 1}.svg`);
+    
+    // Fisher-Yates shuffle algorithm
+    for (let i = images.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [images[i], images[j]] = [images[j], images[i]];
+    }
+    
+    // Only take first 8 images
+    setShuffledImages(images.slice(0, 8));
+  }, []);
+
   return (
   <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       {/* Hero Section */}
@@ -21,13 +38,19 @@ export function LandingPage() {
           </Button>
         </div>
 
-        {/* Hero Image */}
-        <div className="max-w-4xl mx-auto mb-20">
-          <img
-            src="/images/hero.svg"
-            alt="Butterfly on plant"
-            className="w-full h-96 object-cover rounded-lg shadow-xl"
-          />
+        {/* Hero Image Grid */}
+        <div className="max-w-6xl mx-auto mb-20">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:grid-rows-2">
+            {shuffledImages.map((image, index) => (
+              <div key={index} className="aspect-square overflow-hidden rounded-lg shadow-md hover:shadow-lg transition-shadow">
+                <img
+                  src={`/landingpage_images/${image}`}
+                  alt={`Lepidoptera and plant collection ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Features Grid */}

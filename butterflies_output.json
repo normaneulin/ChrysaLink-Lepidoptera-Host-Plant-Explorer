@@ -1,0 +1,56 @@
+[
+  {
+    "genus": "Aeromachus",
+    "specific_epithet": "musca",
+    "subspecific_epithet": "",
+    "common_name": "SCRUB HOPPER",
+    "scientific_name": "Aeromachus musca",
+    "author": "Mabille",
+    "year_of_publication": "1876"
+  },
+  {
+    "genus": "Aeromachus",
+    "specific_epithet": "pygmaeus",
+    "subspecific_epithet": "",
+    "common_name": "PYGMY SCRUB HOPPER",
+    "scientific_name": "Aeromachus pygmaeus",
+    "author": "Fabricius",
+    "year_of_publication": "1775"
+  },
+  {
+    "genus": "Baoris",
+    "specific_epithet": "oceia",
+    "subspecific_epithet": "",
+    "common_name": "PAINTBRUSH SWIFT",
+    "scientific_name": "Baoris oceia",
+    "author": "Hewitson",
+    "year_of_publication": "1868"
+  },
+  {
+    "genus": "Borbo",
+    "specific_epithet": "cinnara",
+    "subspecific_epithet": "",
+    "common_name": "FORMOSAN SWIFT",
+    "scientific_name": "Borbo cinnara",
+    "author": "Wallace",
+    "year_of_publication": "1866"
+  },
+  {
+    "genus": "Acerbas",
+    "specific_epithet": "duris",
+    "subspecific_epithet": "duris",
+    "common_name": "BANDED PALMER",
+    "scientific_name": "Acerbas duris duris",
+    "author": "Mabille",
+    "year_of_publication": "1883"
+  },
+  {
+    "genus": "Ancistroides",
+    "specific_epithet": "nigrita",
+    "subspecific_epithet": "fumatus",
+    "common_name": "CHOCOLATE DEMON",
+    "scientific_name": "Ancistroides nigrita fumatus",
+    "author": "Mabille",
+    "year_of_publication": "1876"
+  }
+]
