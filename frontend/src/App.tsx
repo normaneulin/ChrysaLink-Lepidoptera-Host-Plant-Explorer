@@ -47,19 +47,30 @@ export default function App() {
             toast.success('Email confirmed! Welcome to ChrysaLink!');
           }
           
-          // Create profile for Google sign-ups and email confirmations
-          if (session.user.user_metadata?.name || session.user.email) {
+          // Create or update profile with complete user data
+          if (session.user.email) {
             try {
               const { data: existingProfile } = await supabase
                 .from('profiles')
-                .select('id')
+                .select('*')
                 .eq('id', session.user.id)
                 .single();
               
-              if (!existingProfile) {
+              if (existingProfile) {
+                // Update profile if username or email is missing
+                if (!existingProfile.username || !existingProfile.email) {
+                  await supabase.from('profiles').update({
+                    username: existingProfile.username || session.user.email.split('@')[0],
+                    email: session.user.email,
+                  }).eq('id', session.user.id);
+                }
+              } else {
+                // Create new profile
                 await supabase.from('profiles').insert({
                   id: session.user.id,
                   name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+                  username: session.user.user_metadata?.username || session.user.email.split('@')[0],
+                  email: session.user.email,
                 });
               }
             } catch (error) {
@@ -74,6 +85,7 @@ export default function App() {
           setUserId(null);
           localStorage.removeItem('accessToken');
           localStorage.removeItem('userId');
+          setLocation('/');
         }
       }
     );
