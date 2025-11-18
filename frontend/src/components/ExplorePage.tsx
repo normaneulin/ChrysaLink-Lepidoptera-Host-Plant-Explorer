@@ -358,9 +358,10 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="outline" onClick={fetchObservations}>
+          {/*<Button variant="outline" onClick={fetchObservations}>
             Refresh
           </Button>
+          */}
         </div>
 
         {/* Active Filters Display */}
@@ -406,12 +407,15 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
             <div className="h-[600px] flex items-center justify-center">
               <p>Loading observations...</p>
             </div>
-          ) : filteredObservations.length === 0 ? (
-            <div className="h-[600px] flex items-center justify-center text-gray-500">
-              <p>No observations found</p>
-            </div>
           ) : (
-            <MapView />
+            <>
+              <MapView />
+              {filteredObservations.length === 0 && (
+                <div className="text-center py-4 text-gray-500">
+                  <p>No observations found</p>
+                </div>
+              )}
+            </>
           )}
         </TabsContent>
 
