@@ -7,9 +7,10 @@ interface NavbarProps {
   isLoggedIn: boolean;
   onLogout?: () => void;
   notificationCount?: number;
+  isLoggingOut?: boolean;
 }
 
-export function Navbar({ isLoggedIn, onLogout, notificationCount = 0 }: NavbarProps) {
+export function Navbar({ isLoggedIn, onLogout, notificationCount = 0, isLoggingOut = false }: NavbarProps) {
   return (
     <nav className="border-b bg-white">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
@@ -52,7 +53,7 @@ export function Navbar({ isLoggedIn, onLogout, notificationCount = 0 }: NavbarPr
                   <User className="h-5 w-5" />
                 </Button>
               </Link>
-              <Button variant="ghost" size="icon" onClick={onLogout}>
+              <Button variant="ghost" size="icon" onClick={onLogout} disabled={isLoggingOut}>
                 <LogOut className="h-5 w-5" />
               </Button>
             </>

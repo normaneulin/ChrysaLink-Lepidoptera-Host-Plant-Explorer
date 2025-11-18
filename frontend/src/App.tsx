@@ -52,29 +52,33 @@ export default function App() {
             try {
               const { data: existingProfile } = await supabase
                 .from('profiles')
-                .select('*')
+                .select('id, username, email')
                 .eq('id', session.user.id)
                 .single();
               
+              // Always ensure username and email are set
+              const { email, id: userId } = session.user;
+              const username = existingProfile?.username || email.split('@')[0];
+              
               if (existingProfile) {
-                // Update profile if username or email is missing
+                // Update profile to ensure username and email are set
                 if (!existingProfile.username || !existingProfile.email) {
                   await supabase.from('profiles').update({
-                    username: existingProfile.username || session.user.email.split('@')[0],
-                    email: session.user.email,
-                  }).eq('id', session.user.id);
+                    username: username,
+                    email: email,
+                  }).eq('id', userId);
                 }
               } else {
-                // Create new profile
+                // Create new profile (shouldn't happen but handle it)
                 await supabase.from('profiles').insert({
-                  id: session.user.id,
-                  name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
-                  username: session.user.user_metadata?.username || session.user.email.split('@')[0],
-                  email: session.user.email,
-                });
+                  id: userId,
+                  name: session.user.user_metadata?.name || email?.split('@')[0] || 'User',
+                  username: username,
+                  email: email,
+                }).catch(err => console.warn('Profile creation on signin:', err));
               }
             } catch (error) {
-              console.error('Profile creation error:', error);
+              console.error('Profile update error:', error);
             }
           }
           
@@ -159,21 +163,32 @@ export default function App() {
     setLocation('/home');
   };
 
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
   const handleLogout = async () => {
+    if (isLoggingOut) return; // Prevent double-click
+    
+    setIsLoggingOut(true);
     try {
-      // Always sign out from Supabase
-      await supabase.auth.signOut();
+      // Sign out from Supabase
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.warn('Supabase signOut warning:', error);
+        // Continue with local logout even if Supabase signOut has issues
+      }
     } catch (error) {
       console.error('Supabase signOut error:', error);
+      // Continue with local logout even on error
+    } finally {
+      // Always clear local state and storage
+      setAccessToken(null);
+      setUserId(null);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('userId');
+      setLocation('/');
+      toast.success('Logged out successfully');
+      setIsLoggingOut(false);
     }
-    
-    // Always clear local state and storage, regardless of signOut result
-    setAccessToken(null);
-    setUserId(null);
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('userId');
-    setLocation('/');
-    toast.success('Logged out successfully');
   };
 
   const handleUploadSuccess = () => {
@@ -194,6 +209,7 @@ export default function App() {
         isLoggedIn={isLoggedIn} 
         onLogout={handleLogout}
         notificationCount={notificationCount}
+        isLoggingOut={isLoggingOut}
       />
       
       <main className="min-h-screen bg-gray-50">
