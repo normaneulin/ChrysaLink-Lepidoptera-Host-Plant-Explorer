@@ -161,18 +161,20 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
-      if (accessToken) {
-        await authService.signOut(accessToken);
-      }
-      setAccessToken(null);
-      setUserId(null);
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('userId');
-      setLocation('/');
-      toast.success('Logged out successfully');
+      // Always sign out from Supabase
+      await supabase.auth.signOut();
     } catch (error) {
-      console.error('Logout error:', error);
-      toast.error('Failed to logout');
+      console.error('Supabase signOut error:', error);
+    }
+    
+    // Always clear local state and storage, regardless of signOut result
+    setAccessToken(null);
+    setUserId(null);
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('userId');
+    setLocation('/');
+    toast.success('Logged out successfully');
+  };
     }
   };
 
