@@ -107,20 +107,32 @@ export default function App() {
 
   const checkSession = async () => {
     try {
-      // Check if user is logged in with Supabase Auth
-      const user = await authService.getCurrentUser();
-      if (user) {
-        // Get the current session to get the access token
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.access_token) {
-          setAccessToken(session.access_token);
-          setUserId(user.id);
-          localStorage.setItem('accessToken', session.access_token);
-        }
+      // Get the current session from Supabase (validates token)
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error || !session?.user) {
+        // No valid session, clear stored auth data
+        setAccessToken(null);
+        setUserId(null);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('userId');
+        return;
+      }
+
+      // Session exists and is valid
+      if (session.access_token && session.user.id) {
+        setAccessToken(session.access_token);
+        setUserId(session.user.id);
+        localStorage.setItem('accessToken', session.access_token);
+        localStorage.setItem('userId', session.user.id);
       }
     } catch (error) {
       console.error('Session check error:', error);
+      // On error, clear auth state to be safe
+      setAccessToken(null);
+      setUserId(null);
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('userId');
     }
   };
 
