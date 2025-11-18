@@ -33,39 +33,35 @@ export default function App() {
     // Check for existing session first
     const initializeAuth = async () => {
       await checkSession();
-
-      // Listen for auth state changes (including OAuth redirects and email confirmation)
-      const subscription = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          if (event === 'SIGNED_IN' && session?.user) {
-            setAccessToken(session.access_token);
-            setUserId(session.user.id);
-            localStorage.setItem('accessToken', session.access_token);
-            localStorage.setItem('userId', session.user.id);
-            
-            // Show confirmation message for email-confirmed sign-ups
-            if (session.user.email_confirmed_at) {
-              toast.success('Email confirmed! Welcome to ChrysaLink!');
-            }
-            
-            // Redirect to home after successful sign-in
-            setTimeout(() => setLocation('/'), 100);
-          } else if (event === 'SIGNED_OUT') {
-            setAccessToken(null);
-            setUserId(null);
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('userId');
-            setLocation('/');
-          }
-        }
-      );
-
-      return () => {
-        subscription.data.subscription?.unsubscribe();
-      };
     };
 
     initializeAuth();
+
+    // Listen for auth state changes (including OAuth redirects and email confirmation)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          setAccessToken(session.access_token);
+          setUserId(session.user.id);
+          localStorage.setItem('accessToken', session.access_token);
+          localStorage.setItem('userId', session.user.id);
+          
+          // Redirect to home after successful sign-in
+          setTimeout(() => setLocation('/'), 100);
+        } else if (event === 'SIGNED_OUT') {
+          setAccessToken(null);
+          setUserId(null);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('userId');
+          setLocation('/');
+        }
+      }
+    );
+
+    // Cleanup subscription on unmount
+    return () => {
+      subscription?.unsubscribe();
+    };
   }, [setLocation]);
 
   useEffect(() => {
