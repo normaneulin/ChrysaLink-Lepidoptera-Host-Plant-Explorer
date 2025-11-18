@@ -145,7 +145,7 @@ class AuthService {
             const { error: updateError } = await supabase
               .from('profiles')
               .update({
-                username: data.username || data.name,
+                username: data.username,
                 email: data.email,
               })
               .eq('id', authData.user.id);
