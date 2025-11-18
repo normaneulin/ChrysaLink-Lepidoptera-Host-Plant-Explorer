@@ -1,7 +1,7 @@
 import { Link } from 'wouter';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
-import { Search, Map, Users, TrendingUp } from 'lucide-react';
+import { Search, Map, Users, TrendingUp, Mail, Github, Twitter } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 export function LandingPage() {
@@ -166,6 +166,89 @@ export function LandingPage() {
           </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer className="bg-gray-700 text-gray-300 mt-20 border-t border-gray-700">
+        <div className="container mx-auto px-4 py-16">
+          {/* Links and Logo Section - Horizontal Layout */}
+          <div className="flex flex-row justify-center items-start gap-8 mb-12 pb-4 pt-4">
+            {/* Platform Links */}
+            <div>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <Link href="/explore">
+                    <a className="text-gray-400 hover:text-green-500 transition">Explore</a>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/relationships">
+                    <a className="text-gray-400 hover:text-green-500 transition">Relationships</a>
+                  </Link>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Community</a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Blog</a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Resources Links */}
+            <div>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Documentation</a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Help Center</a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">API</a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Data Downloads</a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Legal Links */}
+            <div>
+              <ul className="space-y-2 text-sm">
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Privacy Policy</a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Terms of Service</a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Contact Us</a>
+                </li>
+                <li>
+                  <a href="#" className="text-gray-400 hover:text-green-500 transition">Attributions</a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Logo */}
+            <div className="flex-shrink-0 flex items-center">
+              <img 
+                src="/footer/footer_logo.svg" 
+                alt="ChrysaLink Logo" 
+                className="h-16 w-auto"
+              />
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-gray-700 mt-8">
+            <div className="text-center text-sm text-gray-400 pt-4 pb-16">
+              <p>&copy; 2025 ChrysaLink. All rights reserved.</p>
+              <p>Made with passion for nature and open science</p>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
