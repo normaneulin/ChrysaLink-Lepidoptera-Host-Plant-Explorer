@@ -35,65 +35,33 @@ export default function App() {
       await checkSession();
 
       // Listen for auth state changes (including OAuth redirects and email confirmation)
-      supabase.auth.onAuthStateChange(
+      const subscription = supabase.auth.onAuthStateChange(
         async (event, session) => {
           if (event === 'SIGNED_IN' && session?.user) {
             setAccessToken(session.access_token);
-          setUserId(session.user.id);
-          localStorage.setItem('accessToken', session.access_token);
-          localStorage.setItem('userId', session.user.id);
-          
-          // Show confirmation message for email-confirmed sign-ups
-          if (session.user.email_confirmed_at) {
-            toast.success('Email confirmed! Welcome to ChrysaLink!');
-          }
-          
-          // Create or update profile with complete user data
-          if (session.user.email) {
-            try {
-              const { data: existingProfile } = await supabase
-                .from('profiles')
-                .select('id, email')
-                .eq('id', session.user.id)
-                .single();
-              
-              const { email, id: userId } = session.user;
-              
-              if (existingProfile) {
-                // Profile already exists - just ensure email is set if missing
-                if (!existingProfile.email) {
-                  await supabase.from('profiles').update({
-                    email: email,
-                  }).eq('id', userId);
-                }
-              } else {
-                // Profile doesn't exist - create it
-                const usernameFromMetadata = session.user.user_metadata?.username || email.split('@')[0];
-                await supabase.from('profiles').insert({
-                  id: userId,
-                  username: usernameFromMetadata,
-                  email: email,
-                }).catch(err => console.warn('Profile creation on signin:', err));
-              }
-            } catch (error) {
-              console.error('Profile update error:', error);
+            setUserId(session.user.id);
+            localStorage.setItem('accessToken', session.access_token);
+            localStorage.setItem('userId', session.user.id);
+            
+            // Show confirmation message for email-confirmed sign-ups
+            if (session.user.email_confirmed_at) {
+              toast.success('Email confirmed! Welcome to ChrysaLink!');
             }
+            
+            // Redirect to home after successful sign-in
+            setTimeout(() => setLocation('/home'), 100);
+          } else if (event === 'SIGNED_OUT') {
+            setAccessToken(null);
+            setUserId(null);
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('userId');
+            setLocation('/');
           }
-          
-          // Redirect to home after successful sign-in
-          setTimeout(() => setLocation('/home'), 100);
-        } else if (event === 'SIGNED_OUT') {
-          setAccessToken(null);
-          setUserId(null);
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('userId');
-          setLocation('/');
         }
-      }
       );
 
       return () => {
-        subscription?.unsubscribe();
+        subscription.data.subscription?.unsubscribe();
       };
     };
 
