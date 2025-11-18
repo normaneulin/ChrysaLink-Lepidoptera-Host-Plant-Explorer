@@ -90,35 +90,6 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
       );
 
       setSignUpErrors(newErrors);
-
-      // Then check if email/username exist (only if format is valid)
-      if (!newErrors.email && signUpForm.email) {
-        try {
-          const emailExists = await authService.checkEmailExists(signUpForm.email);
-          if (emailExists) {
-            setSignUpErrors((prev) => ({
-              ...prev,
-              email: 'Email has already been taken',
-            }));
-          }
-        } catch (error) {
-          console.error('Error checking email:', error);
-        }
-      }
-
-      if (!newErrors.username && signUpForm.username) {
-        try {
-          const usernameExists = await authService.checkUsernameExists(signUpForm.username);
-          if (usernameExists) {
-            setSignUpErrors((prev) => ({
-              ...prev,
-              username: 'Username has already been taken',
-            }));
-          }
-        } catch (error) {
-          console.error('Error checking username:', error);
-        }
-      }
     };
 
     const timer = setTimeout(() => {

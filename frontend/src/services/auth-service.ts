@@ -32,57 +32,7 @@ export interface AuthResponse {
 }
 
 class AuthService {
-  /**
-   * Check if an email already exists in auth.users
-   * @param email - Email to check
-   * @returns true if email exists, false otherwise
-   */
-  async checkEmailExists(email: string): Promise<boolean> {
-    try {
-      // We'll try to sign up with a dummy password to check if email exists
-      // If it returns "User already registered", email exists
-      const { error } = await supabase.auth.signUp({
-        email: email.toLowerCase(),
-        password: 'dummy_password_to_check',
-      });
 
-      if (
-        error &&
-        (error.message.toLowerCase().includes('already registered') ||
-          error.message.toLowerCase().includes('user already exists'))
-      ) {
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Error checking email:', error);
-      return false;
-    }
-  }
-
-  /**
-   * Check if a username already exists in the profiles table
-   * @param username - Username to check
-   * @returns true if username exists, false otherwise
-   */
-  async checkUsernameExists(username: string): Promise<boolean> {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id', { count: 'exact' })
-        .eq('username', username.toLowerCase());
-
-      if (error) {
-        console.error('Error checking username:', error);
-        return false;
-      }
-
-      return !!(data && data.length > 0);
-    } catch (error) {
-      console.error('Error checking username:', error);
-      return false;
-    }
-  }
 
   /**
    * Sign up a new user using Supabase Auth
@@ -91,6 +41,8 @@ class AuthService {
    */
   async signUp(data: SignUpData): Promise<AuthResponse> {
     try {
+      console.log('SignUp called with:', { email: data.email, username: data.username });
+      
       const { data: authData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
@@ -101,6 +53,8 @@ class AuthService {
           },
         },
       });
+
+      console.log('Signup response:', { authData, error });
 
       if (error) {
         console.error('Auth signup error:', error);
