@@ -30,14 +30,15 @@ export default function App() {
   const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
-    // Check for existing session
-    checkSession();
+    // Check for existing session first
+    const initializeAuth = async () => {
+      await checkSession();
 
-    // Listen for auth state changes (including OAuth redirects and email confirmation)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          setAccessToken(session.access_token);
+      // Listen for auth state changes (including OAuth redirects and email confirmation)
+      supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (event === 'SIGNED_IN' && session?.user) {
+            setAccessToken(session.access_token);
           setUserId(session.user.id);
           localStorage.setItem('accessToken', session.access_token);
           localStorage.setItem('userId', session.user.id);
@@ -92,11 +93,14 @@ export default function App() {
           setLocation('/');
         }
       }
-    );
+      );
 
-    return () => {
-      subscription?.unsubscribe();
+      return () => {
+        subscription?.unsubscribe();
+      };
     };
+
+    initializeAuth();
   }, [setLocation]);
 
   useEffect(() => {
