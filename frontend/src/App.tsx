@@ -49,7 +49,7 @@ export default function App() {
             }
             
             // Redirect to home after successful sign-in
-            setTimeout(() => setLocation('/home'), 100);
+            setTimeout(() => setLocation('/'), 100);
           } else if (event === 'SIGNED_OUT') {
             setAccessToken(null);
             setUserId(null);
@@ -129,7 +129,7 @@ export default function App() {
     setUserId(userId);
     localStorage.setItem('accessToken', token);
     localStorage.setItem('userId', userId);
-    setLocation('/home');
+    setLocation('/');
   };
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
