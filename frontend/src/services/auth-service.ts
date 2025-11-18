@@ -16,6 +16,7 @@ export interface SignUpData {
   email: string;
   password: string;
   name: string;
+  username?: string;
 }
 
 export interface SignInData {
@@ -32,6 +33,58 @@ export interface AuthResponse {
 
 class AuthService {
   /**
+   * Check if an email already exists in auth.users
+   * @param email - Email to check
+   * @returns true if email exists, false otherwise
+   */
+  async checkEmailExists(email: string): Promise<boolean> {
+    try {
+      // We'll try to sign up with a dummy password to check if email exists
+      // If it returns "User already registered", email exists
+      const { error } = await supabase.auth.signUp({
+        email: email.toLowerCase(),
+        password: 'dummy_password_to_check',
+      });
+
+      if (
+        error &&
+        (error.message.toLowerCase().includes('already registered') ||
+          error.message.toLowerCase().includes('user already exists'))
+      ) {
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if a username already exists in the profiles table
+   * @param username - Username to check
+   * @returns true if username exists, false otherwise
+   */
+  async checkUsernameExists(username: string): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact' })
+        .eq('username', username.toLowerCase());
+
+      if (error) {
+        console.error('Error checking username:', error);
+        return false;
+      }
+
+      return !!(data && data.length > 0);
+    } catch (error) {
+      console.error('Error checking username:', error);
+      return false;
+    }
+  }
+
+  /**
    * Sign up a new user using Supabase Auth
    * @param data - User registration data
    * @returns Auth response with access token and user info
@@ -42,6 +95,7 @@ class AuthService {
         email: data.email,
         password: data.password,
         options: {
+          emailRedirectTo: `${window.location.origin}/`,
           data: {
             name: data.name,
           },
@@ -49,6 +103,7 @@ class AuthService {
       });
 
       if (error) {
+        console.error('Auth signup error:', error);
         return {
           accessToken: '',
           user: null,
@@ -62,16 +117,25 @@ class AuthService {
           const { error: profileError } = await supabase.from('profiles').insert({
             id: authData.user.id,
             name: data.name,
+            username: data.username || data.name,
+            email: data.email,
           });
           
           if (profileError) {
             console.error('Profile creation error:', profileError);
+            // Check if it's a unique constraint violation
+            if (profileError.message && profileError.message.toLowerCase().includes('unique')) {
+              return {
+                accessToken: '',
+                user: null,
+                error: 'Email or username has already been taken',
+              };
+            }
           } else {
             console.log('Profile created successfully for user:', authData.user.id);
           }
         } catch (profileError) {
           console.error('Profile creation exception:', profileError);
-          // Continue even if profile creation fails
         }
       }
 
@@ -82,6 +146,7 @@ class AuthService {
         error: undefined,
       };
     } catch (error: any) {
+      console.error('Sign up exception:', error);
       return {
         accessToken: '',
         user: null,
@@ -121,6 +186,67 @@ class AuthService {
         accessToken: '',
         user: null,
         error: error.message || 'Sign in failed',
+      };
+    }
+  }
+
+  /**
+   * Sign in with Google using Supabase Auth
+   * @returns Promise that resolves when auth flow completes
+   */
+  async signInWithGoogle(): Promise<void> {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/`,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+    } catch (error: any) {
+      throw new Error(error.message || 'Google sign in failed');
+    }
+  }
+
+  /**
+   * Handle email confirmation from URL token
+   * Called when user clicks confirmation link in email
+   * @returns Auth response with access token and user info
+   */
+  async handleEmailConfirmation(): Promise<AuthResponse> {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      
+      if (error) {
+        return {
+          accessToken: '',
+          user: null,
+          error: error.message,
+        };
+      }
+
+      if (data.session) {
+        return {
+          accessToken: data.session.access_token,
+          refreshToken: data.session.refresh_token,
+          user: data.session.user,
+          error: undefined,
+        };
+      }
+
+      return {
+        accessToken: '',
+        user: null,
+        error: undefined,
+      };
+    } catch (error: any) {
+      return {
+        accessToken: '',
+        user: null,
+        error: error.message || 'Failed to confirm email',
       };
     }
   }
