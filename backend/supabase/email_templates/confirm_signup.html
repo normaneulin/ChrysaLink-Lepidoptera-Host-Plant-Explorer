@@ -24,9 +24,10 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
         .header {
-            background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+            background-color: #f0fdf4;
             padding: 30px 20px;
             text-align: center;
+            border-bottom: 2px solid #d1fae5;
         }
         .logo-text {
             color: white;
@@ -67,7 +68,7 @@
         .confirm-button {
             display: inline-block;
             background: linear-gradient(135deg, #047857 0%, #065f46 100%);
-            color: white;
+            color: #ffffff !important;
             padding: 16px 50px;
             text-decoration: none;
             border-radius: 6px;
@@ -196,7 +197,7 @@
     <div class="email-container">
         <div class="header">
             <img src="https://cdn.jsdelivr.net/gh/normaneulin/ChrysaLink-Lepidoptera-Host-Plant-Explorer@main/frontend/public/navbar/logo.png" alt="ChrysaLink Logo" style="width: 60px; height: auto; margin-bottom: 15px;">
-            <h1 style="color: white; margin: 0; font-size: 32px;">Welcome to ChrysaLink!</h1>
+            <h1 style="color: #000000; margin: 0; font-size: 32px;">Welcome to ChrysaLink!</h1>
         </div>
         
         <div class="content">
@@ -209,7 +210,9 @@
             <p style="color: #666; font-size: 15px; margin-bottom: 25px;">To activate your account and get started, please confirm your email address:</p>
             
             <div class="button-container">
-                <a href="{{ .ConfirmationURL }}" class="confirm-button">✓ Confirm Email Address</a>
+                <a href="{{ .ConfirmationURL }}" class="confirm-button">
+                    <span style="color:#ffffff !important;">Confirm Email Address</span>
+                </a>
             </div>
             
             <div class="features-section">
