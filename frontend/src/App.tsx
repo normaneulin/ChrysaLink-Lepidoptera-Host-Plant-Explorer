@@ -53,28 +53,25 @@ export default function App() {
             try {
               const { data: existingProfile } = await supabase
                 .from('profiles')
-                .select('id, username, email')
+                .select('id, email')
                 .eq('id', session.user.id)
                 .single();
               
-              // Always ensure username and email are set
               const { email, id: userId } = session.user;
-              const username = existingProfile?.username || email.split('@')[0];
               
               if (existingProfile) {
-                // Update profile to ensure username and email are set
-                if (!existingProfile.username || !existingProfile.email) {
+                // Profile already exists - just ensure email is set if missing
+                if (!existingProfile.email) {
                   await supabase.from('profiles').update({
-                    username: username,
                     email: email,
                   }).eq('id', userId);
                 }
               } else {
-                // Create new profile (shouldn't happen but handle it)
+                // Profile doesn't exist - create it
+                const usernameFromMetadata = session.user.user_metadata?.username || email.split('@')[0];
                 await supabase.from('profiles').insert({
                   id: userId,
-                  name: session.user.user_metadata?.name || email?.split('@')[0] || 'User',
-                  username: username,
+                  username: usernameFromMetadata,
                   email: email,
                 }).catch(err => console.warn('Profile creation on signin:', err));
               }

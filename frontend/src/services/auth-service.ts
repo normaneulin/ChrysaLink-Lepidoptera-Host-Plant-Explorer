@@ -97,7 +97,7 @@ class AuthService {
         options: {
           emailRedirectTo: `${window.location.origin}/`,
           data: {
-            name: data.name,
+            username: data.username,
           },
         },
       });
@@ -159,8 +159,7 @@ class AuthService {
               .from('profiles')
               .insert({
                 id: authData.user.id,
-                name: data.name,
-                username: data.username || data.name,
+                username: data.username,
                 email: data.email,
               });
             
@@ -209,6 +208,9 @@ class AuthService {
    */
   async signIn(data: SignInData): Promise<AuthResponse> {
     try {
+      // Clear any stale session data before signing in fresh
+      await supabase.auth.signOut();
+      
       const { data: authData, error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
