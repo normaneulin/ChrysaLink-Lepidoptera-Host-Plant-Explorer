@@ -159,9 +159,9 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
     try {
       const response = await authService.signUp({
         email: signUpForm.email,
-        password: signUpForm.password,
         name: '', // Not used - name will be edited by user later in profile
-        username: signUpForm.username || signUpForm.email.split('@')[0],
+        username: signUpForm.username,
+        password: signUpForm.password,
       });
 
       if (response.error) {
