@@ -63,7 +63,7 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
         .from('profiles')
         .insert({
           id: userId,
-          name: 'User',
+          // name is intentionally not set - user will edit it in their profile
         })
         .select()
         .single();
