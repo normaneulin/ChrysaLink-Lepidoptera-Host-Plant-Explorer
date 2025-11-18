@@ -161,7 +161,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
         email: signUpForm.email,
         password: signUpForm.password,
         name: signUpForm.username,
-        username: signUpForm.username,
+        username: signUpForm.username || signUpForm.email.split('@')[0],
       });
 
       if (response.error) {

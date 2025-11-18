@@ -131,7 +131,7 @@ CREATE TABLE public.points_ledger (
 );
 CREATE TABLE public.profiles (
   id uuid NOT NULL,
-  name text NOT NULL,
+  name text,
   bio text,
   followers integer DEFAULT 0,
   following integer DEFAULT 0,
@@ -141,6 +141,8 @@ CREATE TABLE public.profiles (
   avatar_url text,
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  username text UNIQUE NOT NULL,
+  email text UNIQUE NOT NULL,
   CONSTRAINT profiles_pkey PRIMARY KEY (id),
   CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
 );
