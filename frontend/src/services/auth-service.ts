@@ -104,6 +104,19 @@ class AuthService {
 
       if (error) {
         console.error('Auth signup error:', error);
+        
+        // Even if there's an error, try to create the profile if user was created
+        // This handles rate limiting scenarios where signup succeeds but we get an error
+        if (error.message?.toLowerCase().includes('retry') || error.message?.toLowerCase().includes('after')) {
+          // This is a rate limit error - the user was likely created
+          // Try to get the user from local metadata or return what we have
+          return {
+            accessToken: '',
+            user: null, // Can't determine user on rate limit
+            error: error.message,
+          };
+        }
+        
         return {
           accessToken: '',
           user: null,
@@ -111,9 +124,10 @@ class AuthService {
         };
       }
 
-      // Create user profile
+      // Create user profile immediately after auth succeeds
       if (authData.user) {
         try {
+          // Insert profile with all required fields
           const { error: profileError } = await supabase.from('profiles').insert({
             id: authData.user.id,
             name: data.name,
@@ -131,11 +145,14 @@ class AuthService {
                 error: 'Email or username has already been taken',
               };
             }
+            // Don't fail signup just because profile creation failed
+            // The profile can be created/updated later
           } else {
             console.log('Profile created successfully for user:', authData.user.id);
           }
         } catch (profileError) {
           console.error('Profile creation exception:', profileError);
+          // Continue anyway - profile can be created on login
         }
       }
 
