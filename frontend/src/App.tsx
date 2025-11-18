@@ -17,6 +17,11 @@ import { toast } from 'sonner';
 import { apiClient } from './api/client';
 import { authService } from './services/auth-service';
 
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`,
+  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+);
+
 export default function App() {
   const [location, setLocation] = useLocation();
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -27,7 +32,56 @@ export default function App() {
   useEffect(() => {
     // Check for existing session
     checkSession();
-  }, []);
+
+    // Listen for auth state changes (including OAuth redirects and email confirmation)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          setAccessToken(session.access_token);
+          setUserId(session.user.id);
+          localStorage.setItem('accessToken', session.access_token);
+          localStorage.setItem('userId', session.user.id);
+          
+          // Show confirmation message for email-confirmed sign-ups
+          if (session.user.email_confirmed_at) {
+            toast.success('Email confirmed! Welcome to ChrysaLink!');
+          }
+          
+          // Create profile for Google sign-ups and email confirmations
+          if (session.user.user_metadata?.name || session.user.email) {
+            try {
+              const { data: existingProfile } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('id', session.user.id)
+                .single();
+              
+              if (!existingProfile) {
+                await supabase.from('profiles').insert({
+                  id: session.user.id,
+                  name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'User',
+                });
+              }
+            } catch (error) {
+              console.error('Profile creation error:', error);
+            }
+          }
+          
+          // Redirect to home after successful sign-in
+          setTimeout(() => setLocation('/home'), 100);
+        } else if (event === 'SIGNED_OUT') {
+          setAccessToken(null);
+          setUserId(null);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('userId');
+        }
+      }
+    );
+
+    return () => {
+      subscription?.unsubscribe();
+    };
+  }, [setLocation]);
 
   useEffect(() => {
     // Fetch notification count when logged in
@@ -45,10 +99,7 @@ export default function App() {
       const user = await authService.getCurrentUser();
       if (user) {
         // Get the current session to get the access token
-        const { data: { session } } = await createClient(
-          import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`,
-          import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-        ).auth.getSession();
+        const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.access_token) {
           setAccessToken(session.access_token);

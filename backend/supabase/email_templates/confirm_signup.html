@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .logo-text {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+        .tagline {
+            color: rgba(255,255,255,0.9);
+            font-size: 14px;
+            font-style: italic;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .content h2 {
+            color: #047857;
+            margin: 0 0 20px 0;
+            font-size: 24px;
+            text-align: center;
+        }
+        .greeting {
+            color: #555;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+        .intro-text {
+            color: #666;
+            font-size: 15px;
+            line-height: 1.8;
+            margin-bottom: 30px;
+        }
+        .button-container {
+            text-align: center;
+            margin: 35px 0;
+        }
+        .confirm-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+            color: white;
+            padding: 16px 50px;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            border: 2px solid #065f46;
+            box-shadow: 0 4px 6px rgba(4, 120, 87, 0.3);
+        }
+        .confirm-button:hover {
+            background: linear-gradient(135deg, #065f46 0%, #054e37 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(4, 120, 87, 0.4);
+        }
+        .divider {
+            text-align: center;
+            margin: 25px 0;
+            color: #ccc;
+            font-size: 14px;
+        }
+        .manual-link {
+            background-color: #f9fafb;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid #047857;
+        }
+        .manual-link-label {
+            color: #6b7280;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .link-text {
+            color: #047857;
+            word-break: break-all;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+            line-height: 1.4;
+        }
+        .features-section {
+            background-color: #ecfdf5;
+            padding: 25px;
+            border-radius: 6px;
+            margin: 30px 0;
+        }
+        .features-title {
+            color: #065f46;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .features-list {
+            list-style: none;
+        }
+        .features-list li {
+            color: #555;
+            font-size: 14px;
+            margin-bottom: 10px;
+            padding-left: 25px;
+            position: relative;
+        }
+        .features-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #047857;
+            font-weight: bold;
+        }
+        .security-note {
+            background-color: #f3f4f6;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 25px 0;
+            font-size: 13px;
+            color: #666;
+            border: 1px solid #e5e7eb;
+        }
+        .security-icon {
+            color: #047857;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        .footer {
+            background-color: #f9fafb;
+            padding: 25px 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #6b7280;
+            border-top: 1px solid #e5e7eb;
+        }
+        .footer-text {
+            margin: 5px 0;
+        }
+        .footer-links {
+            margin-top: 12px;
+        }
+        .footer-links a {
+            color: #047857;
+            text-decoration: none;
+            margin: 0 10px;
+            font-size: 11px;
+        }
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 600px) {
+            .content {
+                padding: 25px 15px;
+            }
+            .confirm-button {
+                padding: 14px 30px;
+                font-size: 15px;
+            }
+            .header {
+                padding: 25px 15px;
+            }
+            .logo-text {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <img src="https://cdn.jsdelivr.net/gh/normaneulin/ChrysaLink-Lepidoptera-Host-Plant-Explorer@main/frontend/public/navbar/logo.png" alt="ChrysaLink Logo" style="width: 60px; height: auto; margin-bottom: 15px;">
+            <h1 style="color: white; margin: 0; font-size: 32px;">Welcome to ChrysaLink!</h1>
+        </div>
+        
+        <div class="content">
+            <h2>Confirm Your Email Address</h2>
+            
+            <p class="greeting">Hi {{ .Email }},</p>
+            
+            <p class="intro-text">Welcome to ChrysaLink! We're thrilled to have you join our community of naturalists, researchers, and butterfly enthusiasts dedicated to documenting the fascinating relationships between Lepidoptera and their host plants.</p>
+            
+            <p style="color: #666; font-size: 15px; margin-bottom: 25px;">To activate your account and get started, please confirm your email address:</p>
+            
+            <div class="button-container">
+                <a href="{{ .ConfirmationURL }}" class="confirm-button">✓ Confirm Email Address</a>
+            </div>
+            
+            <div class="features-section">
+                <div class="features-title">Once confirmed, you'll be able to:</div>
+                <ul class="features-list">
+                    <li>Upload observations of butterflies, moths & host plants</li>
+                    <li>Suggest and verify species identifications</li>
+                    <li>Explore relationships between species</li>
+                    <li>Earn badges and build your reputation</li>
+                    <li>Connect with other nature enthusiasts</li>
+                </ul>
+            </div>
+            
+            <div class="security-note">
+                <strong>Security Note:</strong> This confirmation link expires after 24 hours. If you didn't sign up for ChrysaLink, you can safely ignore this email.
+            </div>
+            
+            <p style="color: #666; font-size: 15px; margin-top: 30px; text-align: center;">
+                <strong>Questions?</strong> Check out our <a href="#" style="color: #047857; text-decoration: none;">help center</a> or reply to this email.
+            </p>
+            
+            <p style="margin-top: 30px; text-align: center; color: #047857; font-weight: 600;">— The ChrysaLink Team</p>
+        </div>
+        
+        <div class="footer">
+            <p class="footer-text">© 2025 ChrysaLink. All rights reserved.</p>
+            <p class="footer-text">This is an automated message, please do not reply directly to this email.</p>
+            <div class="footer-links">
+                <a href="#">Privacy Policy</a> | 
+                <a href="#">Terms of Service</a> | 
+                <a href="#">Contact Us</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
