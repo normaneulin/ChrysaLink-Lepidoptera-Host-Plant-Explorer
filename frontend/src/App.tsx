@@ -175,8 +175,6 @@ export default function App() {
     setLocation('/');
     toast.success('Logged out successfully');
   };
-    }
-  };
 
   const handleUploadSuccess = () => {
     setIsUploadModalOpen(false);
