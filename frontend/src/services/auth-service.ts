@@ -124,67 +124,6 @@ class AuthService {
         };
       }
 
-      // Create user profile immediately after auth succeeds
-      // This happens even if email confirmation is required
-      if (authData.user) {
-        try {
-          // First check if profile already exists
-          const { data: existingProfile, error: selectError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', authData.user.id)
-            .single();
-          
-          if (selectError && selectError.code !== 'PGRST116') {
-            // PGRST116 means "no rows found" which is expected for new users
-            console.warn('Error checking existing profile:', selectError);
-          }
-          
-          if (existingProfile) {
-            // Profile exists, update it if needed
-            const { error: updateError } = await supabase
-              .from('profiles')
-              .update({
-                username: data.username,
-                email: data.email,
-              })
-              .eq('id', authData.user.id);
-            
-            if (updateError) {
-              console.error('Profile update error:', updateError);
-            }
-          } else {
-            // Profile doesn't exist, create it
-            const { error: insertError } = await supabase
-              .from('profiles')
-              .insert({
-                id: authData.user.id,
-                username: data.username,
-                email: data.email,
-              });
-            
-            if (insertError) {
-              console.error('Profile creation error:', insertError);
-              // Check if it's a unique constraint violation
-              if (insertError.message && insertError.message.toLowerCase().includes('unique')) {
-                return {
-                  accessToken: '',
-                  user: null,
-                  error: 'Email or username has already been taken',
-                };
-              }
-              // Don't fail signup just because profile creation failed
-              // The profile can be created/updated later
-            } else {
-              console.log('Profile created successfully for user:', authData.user.id);
-            }
-          }
-        } catch (profileError) {
-          console.error('Profile creation exception:', profileError);
-          // Continue anyway - profile can be created on login
-        }
-      }
-
       return {
         accessToken: authData.session?.access_token || '',
         refreshToken: authData.session?.refresh_token,
