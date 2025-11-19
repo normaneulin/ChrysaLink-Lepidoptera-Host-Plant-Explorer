@@ -7,18 +7,21 @@ import { useEffect, useState } from 'react';
 export function LandingPage() {
   const [shuffledImages, setShuffledImages] = useState<string[]>([]);
 
-  useEffect(() => {
-    // Create array of image numbers 1-12
+  // Fisher-Yates shuffle algorithm
+  const shuffleImages = () => {
     const images = Array.from({ length: 12 }, (_, i) => `image${i + 1}.svg`);
     
-    // Fisher-Yates shuffle algorithm
     for (let i = images.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [images[i], images[j]] = [images[j], images[i]];
     }
     
-    // Only take first 8 images
     setShuffledImages(images.slice(0, 8));
+  };
+
+  useEffect(() => {
+    // Initialize with shuffled images on mount
+    shuffleImages();
   }, []);
 
   return (
@@ -42,7 +45,7 @@ export function LandingPage() {
         <div className="max-w-6xl mx-auto mb-20">
           <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gridTemplateRows: 'repeat(2, 1fr)' }}>
             {shuffledImages.map((image, index) => (
-              <div key={index} className="aspect-square overflow-hidden rounded-lg shadow-md hover:shadow-lg transition-shadow">
+              <div key={index} className="aspect-square overflow-hidden rounded-lg shadow-md hover:shadow-lg transition-shadow cursor-pointer" onClick={shuffleImages}>
                 <img
                   src={`/landingpage_images/${image}`}
                   alt={`Lepidoptera and plant collection ${index + 1}`}
