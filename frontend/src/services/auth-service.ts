@@ -141,7 +141,7 @@ class AuthService {
         
         // Even if there's an error, try to create the profile if user was created
         // This handles rate limiting scenarios where signup succeeds but we get an error
-        if (error.message?.toLowerCase().includes('retry') || error.message?.toLowerCase().includes('after')) {
+        if (error.message?.toLowerCase().includes('retry') || error.message?.toLowerCase().includes('after') || error.message?.toLowerCase().includes('rate limit')) {
           // This is a rate limit error - the user was likely created
           // Try to get the user from local metadata or return what we have
           return {

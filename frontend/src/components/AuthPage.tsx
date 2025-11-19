@@ -174,7 +174,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
 
       if (response.error) {
         // Check if it's a rate limit error - if so, still show the email confirmation message
-        if (response.error.toLowerCase().includes('retry') || response.error.toLowerCase().includes('after')) {
+        if (response.error.toLowerCase().includes('retry') || response.error.toLowerCase().includes('after') || response.error.toLowerCase().includes('rate limit')) {
           toast.success('Account creation in progress! Please check your email to confirm your sign up.');
           setSignUpForm({ email: '', username: '', password: '', passwordConfirm: '' });
           setIsLoading(false);
