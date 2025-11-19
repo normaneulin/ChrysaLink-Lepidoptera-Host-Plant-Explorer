@@ -153,11 +153,13 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
         console.log('Email or username already exists, preventing signup');
         setSignUpErrors(newErrors);
         toast.error('Email or username already exists');
-        // Clear the email and/or username fields that have duplicates
+        // Clear all fields
         setSignUpForm((prev) => ({
           ...prev,
           ...(emailExists && { email: '' }),
           ...(usernameExists && { username: '' }),
+          password: '',
+          passwordConfirm: '',
         }));
         setIsLoading(false);
         return;
