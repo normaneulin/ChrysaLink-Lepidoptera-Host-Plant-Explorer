@@ -19,10 +19,19 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
   const [suggestCaption, setSuggestCaption] = useState('');
   const [suggestingFor, setSuggestingFor] = useState<string | null>(null);
   const [speciesResults, setSpeciesResults] = useState<any[]>([]);
+  const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {
     fetchFeed();
-  }, []);
+    
+    // Check if this is the user's first visit to home after signup
+    const hasSeenWelcome = localStorage.getItem(`welcome_${userId}`);
+    if (!hasSeenWelcome && userId) {
+      setShowWelcome(true);
+      // Mark that user has seen welcome
+      localStorage.setItem(`welcome_${userId}`, 'true');
+    }
+  }, [userId]);
 
   const fetchFeed = async () => {
     setIsLoading(true);
@@ -170,6 +179,38 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
           currentUserId={userId || undefined}
           onUpdate={() => fetchFeed()}
         />
+      )}
+
+      {/* Welcome Modal - appears only on first visit after signup */}
+      {showWelcome && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-md mx-4">
+            <CardContent className="pt-8">
+              <div className="flex flex-col items-center text-center">
+                {/* Logo */}
+                <img 
+                  src="/navbar/logo.svg" 
+                  alt="ChrysaLink Logo" 
+                  className="h-16 w-auto mb-4"
+                />
+                
+                {/* Welcome Text */}
+                <h1 className="text-3xl font-bold mb-2">Welcome to ChrysaLink</h1>
+                <p className="text-gray-600 mb-8">
+                  Thank you for joining our community! Start exploring and documenting Lepidoptera and their host plants.
+                </p>
+
+                {/* Close Button */}
+                <Button 
+                  onClick={() => setShowWelcome(false)}
+                  className="w-full bg-green-600 hover:bg-green-700"
+                >
+                  Let's Get Started
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
     </div>
   );
