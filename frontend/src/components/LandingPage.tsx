@@ -169,9 +169,9 @@ export function LandingPage() {
 
       {/* Footer */}
       <footer className="bg-gray-700 text-gray-300 mt-20 border-t border-gray-700">
-        <div className="container mx-auto px-4 py-16">
+        <div className="container mx-auto px-4 py-16 pt-4">
           {/* Links and Logo Section - Horizontal Layout */}
-          <div className="flex flex-row justify-center items-start gap-8 mb-12 pb-4 pt-4">
+          <div className="flex flex-row justify-center items-start gap-8 mb-12 pb-12 pt-20">
             {/* Platform Links */}
             <div>
               <ul className="space-y-2 text-sm">
@@ -235,14 +235,14 @@ export function LandingPage() {
               <img 
                 src="/footer/footer_logo.svg" 
                 alt="ChrysaLink Logo" 
-                className="h-16 w-auto"
+                className="h-32 w-auto"
               />
             </div>
           </div>
 
           {/* Divider */}
-          <div className="border-t border-gray-700 mt-8">
-            <div className="text-center text-sm text-gray-400 pt-4 pb-16">
+          <div className="border-t border-gray-700 mt-16">
+            <div className="text-center text-sm text-gray-400 pt-4">
               <p>&copy; 2025 ChrysaLink. All rights reserved.</p>
               <p>Made with passion for nature and open science</p>
             </div>
