@@ -128,6 +128,35 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
     setIsLoading(true);
 
     try {
+      // Check if email or username already exist in database
+      const { emailExists, usernameExists } = await authService.validateSignUp({
+        email: signUpForm.email,
+        name: '',
+        username: signUpForm.username,
+        password: signUpForm.password,
+      });
+
+      console.log('Validation results:', { emailExists, usernameExists });
+
+      const newErrors: SignUpErrors = { ...signUpErrors };
+      
+      if (emailExists) {
+        newErrors.email = 'Email has already been taken';
+      }
+      
+      if (usernameExists) {
+        newErrors.username = 'Username has already been taken';
+      }
+
+      // If either exists, show errors and don't proceed
+      if (emailExists || usernameExists) {
+        console.log('Email or username already exists, preventing signup');
+        setSignUpErrors(newErrors);
+        toast.error('Email or username already exists');
+        setIsLoading(false);
+        return;
+      }
+
       const response = await authService.signUp({
         email: signUpForm.email,
         name: '', // Not used - name will be edited by user later in profile
@@ -171,7 +200,6 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
     } catch (error: any) {
       console.error('Sign up error:', error);
       toast.error(error.message || 'Failed to sign up');
-    } finally {
       setIsLoading(false);
     }
   };

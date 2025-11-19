@@ -33,6 +33,86 @@ export interface AuthResponse {
 
 class AuthService {
 
+  /**
+   * Check if email already exists in profiles table
+   * @param email - Email to check
+   * @returns true if email exists, false otherwise
+   */
+  async checkEmailExists(email: string): Promise<boolean> {
+    try {
+      console.log('Checking if email exists:', email);
+      const { data, error, count } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('email', email);
+
+      console.log('Email check response:', { data, error, count });
+
+      if (error) {
+        console.error('Error checking email:', error);
+        // If there's a permissions error, log it but still return false to allow signup
+        if (error.code === 'PGRST116') {
+          console.warn('RLS policy issue - cannot read profiles table');
+        }
+        return false;
+      }
+
+      const exists = (count ?? 0) > 0;
+      console.log('Email exists result:', exists);
+      return exists;
+    } catch (error: any) {
+      console.error('Exception checking email:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if username already exists in profiles table
+   * @param username - Username to check
+   * @returns true if username exists, false otherwise
+   */
+  async checkUsernameExists(username: string): Promise<boolean> {
+    try {
+      console.log('Checking if username exists:', username);
+      const { data, error, count } = await supabase
+        .from('profiles')
+        .select('id', { count: 'exact', head: true })
+        .eq('username', username);
+
+      console.log('Username check response:', { data, error, count });
+
+      if (error) {
+        console.error('Error checking username:', error);
+        // If there's a permissions error, log it but still return false to allow signup
+        if (error.code === 'PGRST116') {
+          console.warn('RLS policy issue - cannot read profiles table');
+        }
+        return false;
+      }
+
+      const exists = (count ?? 0) > 0;
+      console.log('Username exists result:', exists);
+      return exists;
+    } catch (error: any) {
+      console.error('Exception checking username:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Validate signup data before attempting signup
+   * @param data - User registration data
+   * @returns Object with validation results { emailExists, usernameExists }
+   */
+  async validateSignUp(data: SignUpData): Promise<{ emailExists: boolean; usernameExists: boolean }> {
+    const [emailExists, usernameExists] = await Promise.all([
+      this.checkEmailExists(data.email),
+      data.username ? this.checkUsernameExists(data.username) : Promise.resolve(false),
+    ]);
+
+    return { emailExists, usernameExists };
+  }
+
 
   /**
    * Sign up a new user using Supabase Auth
