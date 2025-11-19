@@ -161,6 +161,7 @@ export function AuthPage({ onAuthSuccess }: AuthPageProps) {
           // Clear the form
           setSignUpForm({ email: '', username: '', password: '', passwordConfirm: '' });
           setIsLoading(false);
+          setLocation('/')
         }
       } else {
         // No error and no user - shouldn't happen but handle it
