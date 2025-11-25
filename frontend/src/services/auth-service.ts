@@ -110,8 +110,27 @@ class AuthService {
 
   /**
    * Sign up a new user using Supabase Auth
-   * @param data - User registration data
-   * @returns Auth response with access token and user info
+   * 
+   * Purpose: Register new user and create authentication session
+   * 
+   * Algorithm:
+   * 1. Call Supabase Auth signUp with email, password
+   * 2. Pass username in metadata via options.data
+   * 3. Configure email redirect URL for email confirmation
+   * 4. Handle rate limiting errors specially
+   * 5. Return access token and user data on success
+   * 6. Database trigger automatically creates profile record
+   * 
+   * @param data - SignUpData (email, password, name, username)
+   * @returns AuthResponse with accessToken, refreshToken, user, or error
+   * 
+   * Email Confirmation Flow:
+   * - Supabase sends confirmation email to user
+   * - User clicks link and is redirected to app
+   * - Session automatically established on redirect
+   * 
+   * Rate Limiting: Special handling for rate limit errors
+   * Database Triggers: Profile auto-created via create_profile_trigger
    */
   async signUp(data: SignUpData): Promise<AuthResponse> {
     try {
@@ -170,8 +189,22 @@ class AuthService {
 
   /**
    * Sign in using Supabase Auth
-   * @param data - User login credentials
-   * @returns Auth response with access token and user info
+   * 
+   * Purpose: Authenticates a user with email and password credentials
+   * 
+   * Algorithm:
+   * 1. Clear any existing stale session data by signing out first
+   * 2. Call Supabase Auth signInWithPassword with credentials
+   * 3. Extract access token and refresh token from response
+   * 4. Return authentication response with user data
+   * 
+   * @param data - User login credentials (email and password)
+   * @returns AuthResponse with accessToken, refreshToken, user, or error
+   * 
+   * Error Handling:
+   * - Invalid credentials return error message
+   * - Network errors are caught and returned
+   * - Empty access token returned on failure
    */
   async signIn(data: SignInData): Promise<AuthResponse> {
     try {

@@ -30,8 +30,11 @@ class FrontendApiClient {
 
     const headers: HeadersInit = {
       "Content-Type": "application/json",
+      // Add Supabase anon key for all requests to edge functions
+      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
     };
 
+    // Override with user access token if provided
     if (accessToken) {
       headers["Authorization"] = `Bearer ${accessToken}`;
     }
@@ -97,6 +100,58 @@ class FrontendApiClient {
 
   async delete<T>(endpoint: string, accessToken?: string): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, { method: "DELETE", accessToken });
+  }
+
+  /**
+   * Search species database with fuzzy matching
+   * 
+   * Purpose: Allow users to search for lepidoptera or plant species
+   * 
+   * Algorithm:
+   * 1. Determine table based on type parameter
+   * 2. Query Supabase with case-insensitive LIKE search
+   * 3. Search common_name field with wildcards (%query%)
+   * 4. Limit results to 20 for performance
+   * 5. Return formatted results array
+   * 
+   * @param query - Search term entered by user
+   * @param type - 'lepidoptera' or 'plant' to choose taxonomy table
+   * @returns ApiResponse with array of matching species
+   * 
+   * Database Tables:
+   * - lepidoptera_taxonomy: butterfly and moth species
+   * - plant_taxonomy: host plant species
+   * 
+   * Query Strategy: ilike with %wildcards% (case-insensitive)
+   * Examples: "blue" matches "Blue Morpho", "Blueberry"
+   * Result Limit: Max 20 to prevent UI overload
+   */
+  async searchSpecies(query: string, type: 'lepidoptera' | 'plant'): Promise<ApiResponse> {
+    try {
+      const table = type === 'lepidoptera' ? 'lepidoptera_taxonomy' : 'plant_taxonomy';
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .ilike('common_name', `%${query}%`)
+        .limit(20);
+
+      if (error) {
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: data || [],
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message || 'Failed to search species',
+      };
+    }
   }
 
   /**

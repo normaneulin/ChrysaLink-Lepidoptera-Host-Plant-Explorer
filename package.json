@@ -9,6 +9,7 @@
   },
   "devDependencies": {
     "plantuml": "^0.0.2",
+    "supabase": "^2.62.5",
     "typescript": "^5.9.3"
   }
 }

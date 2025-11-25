@@ -4,10 +4,8 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { Upload, Search } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { apiClient } from '../api/client';
 import { createClient } from '@supabase/supabase-js';
 
@@ -38,30 +36,41 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   const [showHostPlantPopover, setShowHostPlantPopover] = useState(false);
 
   useEffect(() => {
-    if (lepidopteraSearch.length > 2) {
+    if (lepidopteraSearch.length > 0) {
       searchSpecies(lepidopteraSearch, 'lepidoptera');
+    } else {
+      setLepidopteraSuggestions([]);
     }
   }, [lepidopteraSearch]);
 
   useEffect(() => {
-    if (hostPlantSearch.length > 2) {
+    if (hostPlantSearch.length > 0) {
       searchSpecies(hostPlantSearch, 'plant');
+    } else {
+      setHostPlantSuggestions([]);
     }
   }, [hostPlantSearch]);
 
   const searchSpecies = async (query: string, type: 'lepidoptera' | 'plant') => {
     try {
+      console.log('Searching for:', query, 'type:', type);
       const response = await apiClient.get(
         `/species/search?q=${encodeURIComponent(query)}&type=${type}`,
         accessToken
       );
 
+      console.log('Search response:', response);
+
       if (response.success) {
         if (type === 'lepidoptera') {
           setLepidopteraSuggestions(response.data || []);
+          console.log('Lepidoptera suggestions:', response.data);
         } else {
           setHostPlantSuggestions(response.data || []);
+          console.log('Plant suggestions:', response.data);
         }
+      } else {
+        console.error('Search failed:', response.error);
       }
     } catch (error) {
       console.error('Error searching species:', error);
@@ -182,7 +191,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Upload Observation</DialogTitle>
         </DialogHeader>
@@ -228,49 +237,49 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
 
               <div>
                 <Label htmlFor="lepidoptera-species">Species</Label>
-                <Popover open={showLepidopteraPopover} onOpenChange={setShowLepidopteraPopover}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between"
-                      type="button"
-                    >
-                      {lepidopteraSpecies || "Search species..."}
-                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput 
-                        placeholder="Search species..." 
-                        value={lepidopteraSearch}
-                        onValueChange={setLepidopteraSearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No species found.</CommandEmpty>
-                        <CommandGroup>
-                          {lepidopteraSuggestions.map((species) => (
-                            <CommandItem
-                              key={species.id}
-                              onSelect={() => {
-                                setLepidopteraSpecies(species.name);
-                                setShowLepidopteraPopover(false);
-                              }}
-                            >
-                              <div>
-                                <div>{species.name}</div>
-                                {species.commonName && (
-                                  <div className="text-xs text-gray-500">{species.commonName}</div>
-                                )}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <div className="relative">
+                  <Input
+                    id="lepidoptera-species"
+                    value={lepidopteraSearch}
+                    onChange={(e) => {
+                      setLepidopteraSearch(e.target.value);
+                      setShowLepidopteraPopover(true);
+                    }}
+                    onFocus={() => setShowLepidopteraPopover(true)}
+                    placeholder="Type to search species..."
+                  />
+                  {showLepidopteraPopover && lepidopteraSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                      {lepidopteraSuggestions.map((species) => (
+                        <button
+                          key={species.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
+                          onClick={() => {
+                            setLepidopteraSpecies(species.display_name || species.scientific_name);
+                            setLepidopteraSearch(species.display_name || species.scientific_name);
+                            setShowLepidopteraPopover(false);
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium italic">{species.display_name || species.scientific_name}</div>
+                            {species.taxonomic_level && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                                {species.taxonomic_level}
+                              </span>
+                            )}
+                          </div>
+                          {species.common_name && (
+                            <div className="text-xs text-gray-500">{species.common_name}</div>
+                          )}
+                          {species.family && species.taxonomic_level !== 'family' && (
+                            <div className="text-xs text-gray-400">Family: {species.family}</div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -313,49 +322,49 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
 
               <div>
                 <Label htmlFor="hostplant-species">Species</Label>
-                <Popover open={showHostPlantPopover} onOpenChange={setShowHostPlantPopover}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between"
-                      type="button"
-                    >
-                      {hostPlantSpecies || "Search species..."}
-                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-full p-0">
-                    <Command>
-                      <CommandInput 
-                        placeholder="Search species..." 
-                        value={hostPlantSearch}
-                        onValueChange={setHostPlantSearch}
-                      />
-                      <CommandList>
-                        <CommandEmpty>No species found.</CommandEmpty>
-                        <CommandGroup>
-                          {hostPlantSuggestions.map((species) => (
-                            <CommandItem
-                              key={species.id}
-                              onSelect={() => {
-                                setHostPlantSpecies(species.name);
-                                setShowHostPlantPopover(false);
-                              }}
-                            >
-                              <div>
-                                <div>{species.name}</div>
-                                {species.commonName && (
-                                  <div className="text-xs text-gray-500">{species.commonName}</div>
-                                )}
-                              </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      </CommandList>
-                    </Command>
-                  </PopoverContent>
-                </Popover>
+                <div className="relative">
+                  <Input
+                    id="hostplant-species"
+                    value={hostPlantSearch}
+                    onChange={(e) => {
+                      setHostPlantSearch(e.target.value);
+                      setShowHostPlantPopover(true);
+                    }}
+                    onFocus={() => setShowHostPlantPopover(true)}
+                    placeholder="Type to search species..."
+                  />
+                  {showHostPlantPopover && hostPlantSuggestions.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                      {hostPlantSuggestions.map((species) => (
+                        <button
+                          key={species.id}
+                          type="button"
+                          className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
+                          onClick={() => {
+                            setHostPlantSpecies(species.display_name || species.scientific_name);
+                            setHostPlantSearch(species.display_name || species.scientific_name);
+                            setShowHostPlantPopover(false);
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium italic">{species.display_name || species.scientific_name}</div>
+                            {species.taxonomic_level && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                                {species.taxonomic_level}
+                              </span>
+                            )}
+                          </div>
+                          {species.common_name && (
+                            <div className="text-xs text-gray-500">{species.common_name}</div>
+                          )}
+                          {species.family && species.taxonomic_level !== 'family' && (
+                            <div className="text-xs text-gray-400">Family: {species.family}</div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

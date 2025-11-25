@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChrysaLink Card</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 40px;
+            margin: 0;
+        }
+
+        .observation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            max-width: 1200px;
+        }
+
+        .observation-card {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .observation-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        /* Dual Image Section */
+        .photo-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            height: 200px;
+            background: #000;
+            position: relative;
+        }
+
+        .photo-item {
+            position: relative;
+            background-size: cover;
+            background-position: center;
+            overflow: hidden;
+        }
+
+        .photo-item::before {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+        }
+
+        .photo-label {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            right: 8px;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            z-index: 1;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .photo-label i {
+            font-size: 14px;
+        }
+
+        /* Caption Section */
+        .caption {
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .user-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .userimage {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-size: cover;
+            background-position: center;
+            background-color: #ddd;
+            flex-shrink: 0;
+        }
+
+        .username {
+            font-size: 13px;
+            color: #666;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .username:hover {
+            color: #333;
+        }
+
+        /* Species Info */
+        .species-section {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .species-block {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .species-type {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #999;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .species-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            text-decoration: none;
+        }
+
+        .species-name:hover {
+            color: #74ac00;
+        }
+
+        .scientific-name {
+            font-size: 12px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .connection-icon {
+            text-align: center;
+            color: #74ac00;
+            font-size: 12px;
+            margin: -4px 0;
+        }
+
+        /* Meta Section */
+        .meta {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #eee;
+        }
+
+        .quality_grade {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            width: fit-content;
+        }
+
+        .quality_grade.needs_id {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .quality_grade.research {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .meta-stats {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .meta-item i {
+            font-size: 12px;
+        }
+
+        .meta-item-right {
+            margin-left: auto;
+        }
+
+        .location-text {
+            font-size: 11px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="observation-grid">
+        <!-- Sample Card 1 -->
+        <div class="observation-card">
+            <div class="photo-section">
+                <div class="photo-item" style="background-image: url('https://inaturalist-open-data.s3.amazonaws.com/photos/594633562/medium.jpg');">
+                    <div class="photo-label">
+                        <i class="fa-solid fa-bug"></i>
+                        Lepidoptera
+                    </div>
+                </div>
+                <div class="photo-item" style="background-image: url('https://images.unsplash.com/photo-1530836369250-ef72a3f5cda8?w=400');">
+                    <div class="photo-label">
+                        <i class="fa-solid fa-leaf"></i>
+                        Host Plant
+                    </div>
+                </div>
+            </div>
+            
+            <div class="caption">
+                <div class="user-row">
+                    <a class="userimage" href="#" style="background-image: url('https://static.inaturalist.org/attachments/users/icons/9070822/9a819d3b5199dfd9fb7c68abf4f628f3-medium.jpeg?1745028352');"></a>
+                    <a class="username" href="#">buggyrhi</a>
+                </div>
+                
+                <div class="species-section">
+                    <div class="species-block">
+                        <div class="species-type">
+                            <i class="fa-solid fa-bug"></i>
+                            Lepidoptera
+                        </div>
+                        <a class="species-name" href="#">Australian Armyworm</a>
+                        <span class="scientific-name">Mythimna convecta</span>
+                    </div>
+                    
+                    <div class="connection-icon">
+                        <i class="fa-solid fa-arrows-up-down"></i>
+                    </div>
+                    
+                    <div class="species-block">
+                        <div class="species-type">
+                            <i class="fa-solid fa-leaf"></i>
+                            Host Plant
+                        </div>
+                        <a class="species-name" href="#">Common Grass</a>
+                        <span class="scientific-name">Poa annua</span>
+                    </div>
+                </div>
+                
+                <div class="meta">
+                    <span class="quality_grade needs_id">Needs ID</span>
+                    
+                    <div class="meta-stats">
+                        <span class="meta-item">
+                            <i class="fa-solid fa-fingerprint"></i>
+                            <span>2</span>
+                        </span>
+                        <span class="meta-item">
+                            <i class="fa-solid fa-comment"></i>
+                            <span>1</span>
+                        </span>
+                        <span class="meta-item meta-item-right">
+                            <i class="fa-regular fa-clock"></i>
+                            <span>1h</span>
+                        </span>
+                    </div>
+                    <div class="location-text">
+                        <i class="fa-solid fa-location-dot"></i> Cebu City, Philippines
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sample Card 2 (Research Grade) -->
+        <div class="observation-card">
+            <div class="photo-section">
+                <div class="photo-item" style="background-image: url('https://images.unsplash.com/photo-1594549857526-37382d966c6d?w=400');">
+                    <div class="photo-label">
+                        <i class="fa-solid fa-bug"></i>
+                        Lepidoptera
+                    </div>
+                </div>
+                <div class="photo-item" style="background-image: url('https://images.unsplash.com/photo-1466781783364-36c955e42a7f?w=400');">
+                    <div class="photo-label">
+                        <i class="fa-solid fa-leaf"></i>
+                        Host Plant
+                    </div>
+                </div>
+            </div>
+            
+            <div class="caption">
+                <div class="user-row">
+                    <a class="userimage" href="#" style="background-color: #74ac00;"></a>
+                    <a class="username" href="#">nature_observer</a>
+                </div>
+                
+                <div class="species-section">
+                    <div class="species-block">
+                        <div class="species-type">
+                            <i class="fa-solid fa-bug"></i>
+                            Lepidoptera
+                        </div>
+                        <a class="species-name" href="#">Monarch Butterfly</a>
+                        <span class="scientific-name">Danaus plexippus</span>
+                    </div>
+                    
+                    <div class="connection-icon">
+                        <i class="fa-solid fa-arrows-up-down"></i>
+                    </div>
+                    
+                    <div class="species-block">
+                        <div class="species-type">
+                            <i class="fa-solid fa-leaf"></i>
+                            Host Plant
+                        </div>
+                        <a class="species-name" href="#">Milkweed</a>
+                        <span class="scientific-name">Asclepias syriaca</span>
+                    </div>
+                </div>
+                
+                <div class="meta">
+                    <span class="quality_grade research">Research Grade</span>
+                    
+                    <div class="meta-stats">
+                        <span class="meta-item">
+                            <i class="fa-solid fa-fingerprint"></i>
+                            <span>5</span>
+                        </span>
+                        <span class="meta-item">
+                            <i class="fa-solid fa-comment"></i>
+                            <span>3</span>
+                        </span>
+                        <span class="meta-item meta-item-right">
+                            <i class="fa-regular fa-clock"></i>
+                            <span>2d</span>
+                        </span>
+                    </div>
+                    <div class="location-text">
+                        <i class="fa-solid fa-location-dot"></i> Manila, Philippines
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sample Card 3 -->
+        <div class="observation-card">
+            <div class="photo-section">
+                <div class="photo-item" style="background-image: url('https://images.unsplash.com/photo-1526336024174-e58f5cdd8e13?w=400');">
+                    <div class="photo-label">
+                        <i class="fa-solid fa-bug"></i>
+                        Lepidoptera
+                    </div>
+                </div>
+                <div class="photo-item" style="background-image: url('https://images.unsplash.com/photo-1615671524827-c1fe3973b648?w=400');">
+                    <div class="photo-label">
+                        <i class="fa-solid fa-leaf"></i>
+                        Host Plant
+                    </div>
+                </div>
+            </div>
+            
+            <div class="caption">
+                <div class="user-row">
+                    <a class="userimage" href="#" style="background-color: #4a90e2;"></a>
+                    <a class="username" href="#">lepidoptera_fan</a>
+                </div>
+                
+                <div class="species-section">
+                    <div class="species-block">
+                        <div class="species-type">
+                            <i class="fa-solid fa-bug"></i>
+                            Lepidoptera
+                        </div>
+                        <a class="species-name" href="#">Swallowtail Butterfly</a>
+                        <span class="scientific-name">Papilio machaon</span>
+                    </div>
+                    
+                    <div class="connection-icon">
+                        <i class="fa-solid fa-arrows-up-down"></i>
+                    </div>
+                    
+                    <div class="species-block">
+                        <div class="species-type">
+                            <i class="fa-solid fa-leaf"></i>
+                            Host Plant
+                        </div>
+                        <a class="species-name" href="#">Fennel</a>
+                        <span class="scientific-name">Foeniculum vulgare</span>
+                    </div>
+                </div>
+                
+                <div class="meta">
+                    <span class="quality_grade research">Research Grade</span>
+                    
+                    <div class="meta-stats">
+                        <span class="meta-item">
+                            <i class="fa-solid fa-fingerprint"></i>
+                            <span>4</span>
+                        </span>
+                        <span class="meta-item">
+                            <i class="fa-solid fa-comment"></i>
+                            <span>2</span>
+                        </span>
+                        <span class="meta-item meta-item-right">
+                            <i class="fa-regular fa-clock"></i>
+                            <span>5h</span>
+                        </span>
+                    </div>
+                    <div class="location-text">
+                        <i class="fa-solid fa-location-dot"></i> Davao City, Philippines
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

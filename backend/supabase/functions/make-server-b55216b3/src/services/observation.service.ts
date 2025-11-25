@@ -7,6 +7,8 @@ import {
 } from "../types/observation.types.ts";
 import { ValidationError, NotFoundError } from "../utils/error-handler.ts";
 import { validateGPS, validateObservationDate } from "../utils/validators.ts";
+import { StorageService } from "./storage.service.ts";
+import { SpeciesService } from "./species.service.ts";
 
 /**
  * Observation Service
@@ -32,18 +34,63 @@ export const ObservationService = {
     }
 
     try {
+      // Handle image uploads
+      let lepidopteraImageUrl = null;
+      let lepidopteraImagePath = null;
+      let plantImageUrl = null;
+      let plantImagePath = null;
+
+      if (data.lepidopteraImage) {
+        const lepidopteraUpload = await StorageService.uploadImage(
+          data.lepidopteraImage,
+          userId,
+          "lepidoptera"
+        );
+        lepidopteraImageUrl = lepidopteraUpload.url;
+        lepidopteraImagePath = lepidopteraUpload.path;
+      }
+
+      if (data.hostPlantImage) {
+        const plantUpload = await StorageService.uploadImage(
+          data.hostPlantImage,
+          userId,
+          "plant"
+        );
+        plantImageUrl = plantUpload.url;
+        plantImagePath = plantUpload.path;
+      }
+
+      // Match species names to taxonomy IDs
+      let lepidopteraId = null;
+      let plantId = null;
+
+      if (data.lepidopteraSpecies) {
+        lepidopteraId = await SpeciesService.getOrCreateLepidoptera(
+          data.lepidopteraSpecies
+        );
+      }
+
+      if (data.hostPlantSpecies) {
+        plantId = await SpeciesService.getOrCreatePlant(
+          data.hostPlantSpecies
+        );
+      }
+
+      // Create observation record
       const { data: observation, error } = await supabase
         .from("observations")
         .insert([
           {
             user_id: userId,
-            lepidoptera_id: data.lepidopteraSpecies,
-            plant_id: data.hostPlantSpecies,
+            lepidoptera_id: lepidopteraId,
+            plant_id: plantId,
             location: data.location,
             latitude: data.latitude,
             longitude: data.longitude,
             observation_date: data.date,
             notes: data.notes,
+            image_url: lepidopteraImageUrl || plantImageUrl, // Primary image
+            image_storage_path: lepidopteraImagePath || plantImagePath,
             is_public: true,
           },
         ])
@@ -51,6 +98,13 @@ export const ObservationService = {
         .single();
 
       if (error || !observation) {
+        // Clean up uploaded images if observation creation fails
+        if (lepidopteraImagePath) {
+          await StorageService.deleteImage(lepidopteraImagePath);
+        }
+        if (plantImagePath) {
+          await StorageService.deleteImage(plantImagePath);
+        }
         throw new Error(error?.message || "Failed to create observation");
       }
 
@@ -192,17 +246,25 @@ export const ObservationService = {
    */
   async searchLepidoptera(query: string): Promise<Species[]> {
     try {
+      const searchPattern = `%${query}%`;
       const { data, error } = await supabase
         .from("lepidoptera_taxonomy")
-        .select("id, name, common_name as commonName, scientific_name as scientificName")
-        .or(`name.ilike.%${query}%,common_name.ilike.%${query}%`)
-        .limit(20);
+        .select("id, division, family, subfamily, tribe, genus, specific_epithet, subspecific_epithet, common_name, scientific_name")
+        .or(`division.ilike.${searchPattern},family.ilike.${searchPattern},subfamily.ilike.${searchPattern},tribe.ilike.${searchPattern},genus.ilike.${searchPattern},specific_epithet.ilike.${searchPattern},subspecific_epithet.ilike.${searchPattern},scientific_name.ilike.${searchPattern},common_name.ilike.${searchPattern}`)
+        .limit(10);
 
       if (error) {
         throw new Error(error.message);
       }
 
-      return (data || []) as Species[];
+      // Transform to Species interface
+      return (data || []).map(item => ({
+        id: item.id,
+        name: item.scientific_name || item.common_name || 'Unknown',
+        commonName: item.common_name || undefined,
+        scientificName: item.scientific_name || undefined,
+        family: item.family || undefined,
+      }));
     } catch (error: any) {
       throw new Error(error.message || "Search failed");
     }
@@ -213,17 +275,25 @@ export const ObservationService = {
    */
   async searchPlants(query: string): Promise<Species[]> {
     try {
+      const searchPattern = `%${query}%`;
       const { data, error } = await supabase
         .from("plant_taxonomy")
-        .select("id, name, common_name as commonName, scientific_name as scientificName")
-        .or(`name.ilike.%${query}%,common_name.ilike.%${query}%`)
-        .limit(20);
+        .select("id, division, family, genus, specific_epithet, subspecific_epithet, common_name, scientific_name")
+        .or(`division.ilike.${searchPattern},family.ilike.${searchPattern},genus.ilike.${searchPattern},specific_epithet.ilike.${searchPattern},subspecific_epithet.ilike.${searchPattern},scientific_name.ilike.${searchPattern},common_name.ilike.${searchPattern}`)
+        .limit(10);
 
       if (error) {
         throw new Error(error.message);
       }
 
-      return (data || []) as Species[];
+      // Transform to Species interface
+      return (data || []).map(item => ({
+        id: item.id,
+        name: item.scientific_name || item.common_name || 'Unknown',
+        commonName: item.common_name || undefined,
+        scientificName: item.scientific_name || undefined,
+        family: item.family || undefined,
+      }));
     } catch (error: any) {
       throw new Error(error.message || "Search failed");
     }
