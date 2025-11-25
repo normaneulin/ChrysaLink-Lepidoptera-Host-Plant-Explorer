@@ -4,15 +4,10 @@
  * Falls back to direct Supabase queries if edge functions are unavailable
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
   `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/make-server-b55216b3`;
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 
-  `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export interface ApiResponse<T = any> {
   success: boolean;

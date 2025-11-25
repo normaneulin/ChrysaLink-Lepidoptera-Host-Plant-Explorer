@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Route, Switch, useLocation } from 'wouter';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './lib/supabase';
 import { Navbar } from './components/Navbar';
 import { LandingPage } from './components/LandingPage';
 import HomePage from './components/HomePage';
@@ -16,11 +16,6 @@ import { Toaster } from './components/ui/sonner';
 import { toast } from 'sonner';
 import { apiClient } from './api/client';
 import { authService } from './services/auth-service';
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`,
-  import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-);
 
 export default function App() {
   const [location, setLocation] = useLocation();
