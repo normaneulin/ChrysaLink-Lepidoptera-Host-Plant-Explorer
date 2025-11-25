@@ -7,6 +7,27 @@
       <link rel="icon" href="/navbar/logo.png" type="image/png" />
       <meta name="theme-color" content="#F59E0B" />
       <title>ChrysaLink - Lepidoptera & Host Plant Explorer</title>
+      <style>
+        /* Force consistent zoom and prevent layout shifts */
+        html {
+          -webkit-text-size-adjust: 100%;
+          -ms-text-size-adjust: 100%;
+          text-size-adjust: 100%;
+        }
+        body {
+          min-width: 320px;
+          overflow-x: hidden;
+        }
+        /* Ensure consistent scaling across all pages */
+        @media (max-width: 768px) {
+          body {
+            zoom: 0.5;
+            -moz-transform: scale(0.5);
+            -moz-transform-origin: 0 0;
+            width: 200%;
+          }
+        }
+      </style>
   </head>
 
     <body>

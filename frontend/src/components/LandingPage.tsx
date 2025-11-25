@@ -57,7 +57,7 @@ export function LandingPage() {
         </div>
 
         {/* Features Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
+        <div className="grid gap-6 mb-20" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col items-center text-center">
@@ -179,13 +179,13 @@ export function LandingPage() {
             <div>
               <ul className="space-y-2 text-sm">
                 <li>
-                  <Link href="/explore">
-                    <a className="text-gray-400 hover:text-green-500 transition">Explore</a>
+                  <Link href="/explore" className="text-gray-400 hover:text-green-500 transition">
+                    Explore
                   </Link>
                 </li>
                 <li>
-                  <Link href="/relationships">
-                    <a className="text-gray-400 hover:text-green-500 transition">Relationships</a>
+                  <Link href="/relationships" className="text-gray-400 hover:text-green-500 transition">
+                    Relationships
                   </Link>
                 </li>
                 <li>

@@ -12,7 +12,7 @@ interface NavbarProps {
 
 export function Navbar({ isLoggedIn, onLogout, notificationCount = 0, isLoggingOut = false }: NavbarProps) {
   return (
-    <nav className="border-b bg-white">
+    <nav className="border-b bg-white w-full">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2 hover:opacity-80">
