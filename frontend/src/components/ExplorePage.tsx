@@ -143,137 +143,312 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
   );
 
   const GridView = () => (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {filteredObservations.map((obs) => {
-        const imageUrl = obs.image_url || obs.lepidoptera?.image;
-        const lepidopteraSpecies = obs.lepidoptera?.species || 'Unknown';
-        const hostPlantSpecies = obs.hostPlant?.species || 'Unknown';
+        const lepidopteraScientificName = obs.lepidoptera?.scientific_name || 'Unknown';
+        const lepidopteraCommonName = obs.lepidoptera?.common_name;
+        const lepidopteraFamily = obs.lepidoptera?.family;
+        const plantScientificName = obs.plant?.scientific_name || 'Unknown';
+        const plantCommonName = obs.plant?.common_name;
+        const plantFamily = obs.plant?.family;
+        
+        // Get separate images
+        const lepidopteraImage = obs.lepidoptera_image_url || obs.image_url;
+        const plantImage = obs.plant_image_url;
+        
+        // Get user info - try multiple sources
+        const userName = obs.user?.name || obs.user?.username || 'User' + (obs.user_id?.substring(0, 8) || '');
+        const userAvatar = obs.user?.avatar_url;
+        
+        // Calculate time ago
+        const createdDate = new Date(obs.created_at || '');
+        const now = new Date();
+        const diffMs = now.getTime() - createdDate.getTime();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffHours / 24);
+        const timeAgo = diffDays > 0 ? `${diffDays}d` : diffHours > 0 ? `${diffHours}h` : 'Just now';
+        
         return (
-          <Card
+          <div
             key={obs.id}
-            className="cursor-pointer hover:shadow-lg transition-shadow"
+            className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all hover:-translate-y-1 cursor-pointer flex flex-col h-full"
             onClick={() => setSelectedObservation(obs)}
           >
-            <div className="relative h-48 bg-gray-200">
-              {imageUrl && (
-                <img
-                  src={imageUrl}
-                  alt={lepidopteraSpecies}
-                  className="w-full h-full object-cover rounded-t-lg"
-                />
-              )}
-              {!imageUrl && (
-                <div className="w-full h-full flex items-center justify-center text-gray-400">
-                  No image
+            {/* Dual Image Section - Fixed Height Container */}
+            <div className="w-full aspect-[2/1] flex-shrink-0 bg-black">
+              <div className="grid grid-cols-2 h-full w-full">
+                {/* Lepidoptera Image */}
+                <div className="relative overflow-hidden bg-gray-900">
+                  {lepidopteraImage ? (
+                    <img src={lepidopteraImage} alt="Lepidoptera" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-800 text-gray-400 text-sm">
+                      No Image
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 h-[60px] bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-2 left-2 right-2 text-white text-[11px] font-semibold uppercase tracking-wide flex items-center gap-1 z-10">
+                    <MessageSquare className="h-3.5 w-3.5" />
+                    Lepidoptera
+                  </div>
                 </div>
-              )}
-              {obs.comments && obs.comments.length > 0 && (
-                <Badge className="absolute top-2 right-2">
-                  <MessageSquare className="h-3 w-3 mr-1" />
-                  {obs.comments.length}
-                </Badge>
-              )}
-            </div>
-            <CardContent className="pt-4">
-              <div className="space-y-2">
-                <div>
-                  <p className="text-xs text-gray-500">Lepidoptera</p>
-                  <p className="font-medium truncate">{lepidopteraSpecies}</p>
+                
+                {/* Host Plant Image */}
+                <div className="relative overflow-hidden bg-gray-900">
+                  {plantImage ? (
+                    <img src={plantImage} alt="Host Plant" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-700 text-gray-400 text-sm">
+                      No Image
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 h-[60px] bg-gradient-to-t from-black/70 to-transparent" />
+                  <div className="absolute bottom-2 left-2 right-2 text-white text-[11px] font-semibold uppercase tracking-wide flex items-center gap-1 z-10">
+                    <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z"/></svg>
+                    Host Plant
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500">Host Plant</p>
-                  <p className="text-sm truncate">{hostPlantSpecies}</p>
-                </div>
-                <div className="flex items-center text-xs text-gray-500">
-                  <MapPin className="h-3 w-3 mr-1" />
-                  <span className="truncate">{obs.location || 'Unknown location'}</span>
-                </div>
-                {obs.user && (
-                  <p className="text-xs text-gray-500">by {obs.user.name}</p>
-                )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            
+            {/* Caption Section */}
+            <div className="p-4 flex flex-col gap-3">
+              {/* User Row */}
+              <div className="flex items-center gap-2">
+                {userAvatar ? (
+                  <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex-shrink-0" />
+                )}
+                <span className="text-[13px] text-gray-600 font-medium hover:text-gray-900">
+                  {userName}
+                </span>
+              </div>
+              
+              {/* Species Section */}
+              <div className="flex flex-col gap-2">
+                {/* Lepidoptera */}
+                <div className="flex flex-col gap-0.5">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3" />
+                    Lepidoptera
+                  </div>
+                  <div className="font-semibold text-[14px] text-gray-800 hover:text-amber-600">
+                    {lepidopteraCommonName || lepidopteraScientificName}
+                  </div>
+                  <div className="text-[12px] text-gray-500 italic">
+                    {lepidopteraScientificName}
+                  </div>
+                </div>
+                
+                {/* Host Plant */}
+                <div className="flex flex-col gap-0.5">
+                  <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1">
+                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z"/></svg>
+                    Host Plant
+                  </div>
+                  <div className="font-semibold text-[14px] text-gray-800 hover:text-green-600">
+                    {plantCommonName || plantScientificName}
+                  </div>
+                  <div className="text-[12px] text-gray-500 italic">
+                    {plantScientificName}
+                  </div>
+                </div>
+              </div>
+              
+              {/* Meta Section */}
+              <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+                <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-700 w-fit">
+                  Needs ID
+                </span>
+                
+                <div className="flex items-center gap-3 text-[12px] text-gray-500">
+                  <span className="flex items-center gap-1">
+                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,3.5A1.5,1.5 0 0,1 13.5,5A1.5,1.5 0 0,1 12,6.5A1.5,1.5 0 0,1 10.5,5A1.5,1.5 0 0,1 12,3.5M9.5,8H14.5V9.5H9.5M9.5,11.5H14.5V13H9.5M9.5,15H14.5V16.5H9.5"/></svg>
+                    {obs.identifications?.length || 0}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MessageSquare className="h-3 w-3" />
+                    {obs.comments?.length || 0}
+                  </span>
+                  <span className="flex items-center gap-1 ml-auto">
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    {timeAgo}
+                  </span>
+                </div>
+                
+                <div className="text-[11px] text-gray-400 flex items-center gap-1">
+                  <MapPin className="h-3 w-3" />
+                  {obs.location || 'Unknown location'}
+                </div>
+              </div>
+            </div>
+          </div>
         );
       })}
     </div>
   );
 
   const ListView = () => (
-    <div className="space-y-4">
-      {filteredObservations.map((obs) => {
-        const lepidopteraImage = obs.lepidoptera?.image;
-        const hostPlantImage = obs.hostPlant?.image;
-        const lepidopteraSpecies = obs.lepidoptera?.species || 'Unknown Species';
-        const hostPlantSpecies = obs.hostPlant?.species || 'Unknown Host Plant';
-        const observationDate = obs.date || obs.created_at;
-        
-        return (
-          <Card
-            key={obs.id}
-            className="cursor-pointer hover:shadow-lg transition-shadow"
-            onClick={() => setSelectedObservation(obs)}
-          >
-            <CardContent className="p-4">
-              <div className="flex gap-4">
-                <div className="flex gap-2">
-                  {lepidopteraImage && (
-                    <img
-                      src={lepidopteraImage}
-                      alt={lepidopteraSpecies}
-                      className="w-24 h-24 object-cover rounded"
-                    />
-                  )}
-                  {hostPlantImage && (
-                    <img
-                      src={hostPlantImage}
-                      alt={hostPlantSpecies}
-                      className="w-24 h-24 object-cover rounded"
-                    />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h3 className="font-semibold">{lepidopteraSpecies}</h3>
-                      <p className="text-sm text-gray-600">on {hostPlantSpecies}</p>
-                    </div>
-                    {obs.comments && obs.comments.length > 0 && (
-                      <Badge variant="secondary">
-                        <MessageSquare className="h-3 w-3 mr-1" />
-                        {obs.comments.length}
-                      </Badge>
+    <div className="bg-white rounded-lg overflow-hidden shadow-sm">
+      <table className="w-full border-collapse">
+        <thead className="bg-gray-50 border-b-2 border-gray-200">
+          <tr>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide w-20">Lepidoptera Media</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[180px]">Lepidoptera Name</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide w-20">Host Plant Media</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[180px]">Host Plant Name</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[120px]">User</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[140px] cursor-pointer hover:bg-gray-100">Observed</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[200px]">Place</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[140px] cursor-pointer hover:bg-gray-100">Added</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredObservations.map((obs) => {
+            const lepidopteraScientificName = obs.lepidoptera?.scientific_name || 'Unknown';
+            const lepidopteraCommonName = obs.lepidoptera?.common_name;
+            const plantScientificName = obs.plant?.scientific_name || 'Unknown';
+            const plantCommonName = obs.plant?.common_name;
+            
+            const lepidopteraImage = obs.lepidoptera_image_url || obs.image_url;
+            const plantImage = obs.plant_image_url;
+            
+            const userName = obs.user?.name || obs.user?.username || 'User' + (obs.user_id?.substring(0, 8) || '');
+            const userAvatar = obs.user?.avatar_url;
+            
+            const observedDate = new Date(obs.observation_date || obs.created_at || '');
+            const createdDate = new Date(obs.created_at || '');
+            const now = new Date();
+            
+            const formatDate = (date: Date) => {
+              const diffMs = now.getTime() - date.getTime();
+              const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+              
+              if (diffDays === 0) return 'Today';
+              if (diffDays === 1) return 'Yesterday';
+              return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            };
+            
+            const formatTime = (date: Date) => {
+              return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            };
+            
+            return (
+              <tr 
+                key={obs.id}
+                className="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+                onClick={() => setSelectedObservation(obs)}
+              >
+                {/* Lepidoptera Media Column */}
+                <td className="px-3 py-2">
+                  <div className="w-16 h-16 relative rounded overflow-hidden flex-shrink-0">
+                    {lepidopteraImage ? (
+                      <img src={lepidopteraImage} alt="Lepidoptera" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-400">No Image</div>
                     )}
+                    <div className="absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute bottom-0 left-0.5 text-white text-[8px] font-semibold uppercase tracking-wide flex items-center gap-0.5">
+                      <MessageSquare className="h-2 w-2" />
+                    </div>
                   </div>
-                  <div className="space-y-1 text-sm text-gray-600">
-                    <div className="flex items-center">
-                      <MapPin className="h-4 w-4 mr-2" />
-                      <span>{obs.location || 'Unknown location'}</span>
-                      {obs.latitude && obs.longitude && (
-                        <span className="ml-2 text-xs">
-                          ({obs.latitude.toFixed(4)}, {obs.longitude.toFixed(4)})
+                </td>
+
+                {/* Lepidoptera Name Column */}
+                <td className="px-3 py-2">
+                  <div className="flex flex-col gap-0.5">
+                    <a href="#" className="text-[12px] font-semibold text-gray-800 hover:text-amber-600 leading-tight">
+                      {lepidopteraCommonName || lepidopteraScientificName}
+                    </a>
+                    <span className="text-[11px] text-gray-500 italic leading-tight">{lepidopteraScientificName}</span>
+                    <div className="flex gap-2 text-[10px] text-gray-500 mt-0.5">
+                      <span className="flex items-center gap-1">
+                        <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,3.5A1.5,1.5 0 0,1 13.5,5A1.5,1.5 0 0,1 12,6.5A1.5,1.5 0 0,1 10.5,5A1.5,1.5 0 0,1 12,3.5M9.5,8H14.5V9.5H9.5M9.5,11.5H14.5V13H9.5M9.5,15H14.5V16.5H9.5"/></svg>
+                        {obs.identifications?.length || 0}
+                      </span>
+                      {(obs.comments?.length || 0) > 0 && (
+                        <span className="flex items-center gap-1">
+                          <MessageSquare className="h-2.5 w-2.5" />
+                          {obs.comments?.length}
                         </span>
                       )}
                     </div>
-                    {observationDate && (
-                      <div className="flex items-center">
-                        <Calendar className="h-4 w-4 mr-2" />
-                        <span>{new Date(observationDate).toLocaleDateString()}</span>
-                      </div>
-                    )}
-                    {obs.user && (
-                      <p className="text-xs mt-2">Observed by {obs.user.name}</p>
-                    )}
                   </div>
-                  {obs.notes && (
-                    <p className="mt-2 text-sm text-gray-700 line-clamp-2">{obs.notes}</p>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+                </td>
+
+                {/* Host Plant Media Column */}
+                <td className="px-3 py-2">
+                  <div className="w-16 h-16 relative rounded overflow-hidden flex-shrink-0">
+                    {plantImage ? (
+                      <img src={plantImage} alt="Host Plant" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-400">No Image</div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-black/60 to-transparent" />
+                    <div className="absolute bottom-0 left-0.5 text-white text-[8px] font-semibold uppercase tracking-wide flex items-center gap-0.5">
+                      <svg className="h-2 w-2" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z"/></svg>
+                    </div>
+                  </div>
+                </td>
+
+                {/* Host Plant Name Column */}
+                <td className="px-3 py-2">
+                  <div className="flex flex-col gap-0.5">
+                    <a href="#" className="text-[12px] font-semibold text-gray-800 hover:text-green-600 leading-tight">
+                      {plantCommonName || plantScientificName}
+                    </a>
+                    <span className="text-[11px] text-gray-500 italic leading-tight">{plantScientificName}</span>
+                    <span className="inline-block px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-700 w-fit mt-0.5">
+                      Needs ID
+                    </span>
+                  </div>
+                </td>
+
+                {/* User Column */}
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    {userAvatar ? (
+                      <img src={userAvatar} alt={userName} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex-shrink-0" />
+                    )}
+                    <a href="#" className="text-[12px] text-gray-800 hover:text-amber-600 font-medium">
+                      {userName}
+                    </a>
+                  </div>
+                </td>
+
+                {/* Observed Date Column */}
+                <td className="px-3 py-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-gray-800 leading-tight">{formatDate(observedDate)}</span>
+                    <span className="text-[10px] text-gray-500 leading-tight">{formatTime(observedDate)}</span>
+                  </div>
+                </td>
+
+                {/* Place Column */}
+                <td className="px-3 py-2">
+                  <div className="flex items-start gap-1">
+                    <MapPin className="h-2.5 w-2.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <span className="text-[11px] text-gray-600 leading-tight">
+                      {obs.location || 'Unknown location'}
+                    </span>
+                  </div>
+                </td>
+
+                {/* Added Date Column */}
+                <td className="px-3 py-2">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[11px] text-gray-800 leading-tight">{formatDate(createdDate)}</span>
+                    <span className="text-[10px] text-gray-500 leading-tight">{formatTime(createdDate)}</span>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 
