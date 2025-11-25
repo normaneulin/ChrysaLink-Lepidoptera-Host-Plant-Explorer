@@ -69,6 +69,38 @@ export default function App() {
     }
   }, [accessToken]);
 
+  /**
+   * Check and validate existing user session on app load
+   * 
+   * Purpose: Restore user session from Supabase session storage
+   * 
+   * Algorithm:
+   * 1. Call supabase.auth.getSession() to retrieve current session
+   * 2. Validate session exists and has valid user
+   * 3. If no valid session: Clear state and localStorage
+   * 4. If valid session: Extract tokens and store in state + localStorage
+   * 5. Handle errors by clearing all auth state
+   * 
+   * Session Validation:
+   * - Checks session object is not null
+   * - Checks session.user exists
+   * - Checks access_token is present
+   * 
+   * Token Storage:
+   * - State: Accessible to all components via props
+   * - localStorage: Survives page refresh
+   * 
+   * Security: getSession() validates token with Supabase backend
+   * Error Handling: Fail secure (clear auth state on any error)
+   * 
+   * Token Types:
+   * - access_token: JWT for API authentication (short-lived, ~1 hour)
+   * - user.id: UUID for user identification
+   * 
+   * localStorage Keys: 'accessToken', 'userId'
+   * 
+   * Usage: Called once on app mount, re-validates on page refresh
+   */
   const checkSession = async () => {
     try {
       // Get the current session from Supabase (validates token)
@@ -125,6 +157,31 @@ export default function App() {
 
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  /**
+   * Handle user logout with comprehensive cleanup
+   * 
+   * Purpose: Sign out user and reset all authentication state
+   * 
+   * Algorithm:
+   * 1. Check if already logging out (prevent double-click)
+   * 2. Call Supabase auth.signOut to invalidate session
+   * 3. Clear client-side authentication state
+   * 4. Clear localStorage tokens
+   * 5. Redirect to landing page
+   * 6. Show success toast notification
+   * 
+   * State Cleanup:
+   * - accessToken, userId → null
+   * - localStorage.accessToken, localStorage.userId → removed
+   * 
+   * Error Handling Strategy:
+   * - If Supabase signOut fails, log warning but continue
+   * - Local cleanup always executes (try/catch/finally)
+   * - Ensures user can logout even with network issues
+   * - "Graceful degradation" approach
+   * 
+   * Double-Click Prevention: isLoggingOut flag prevents multiple calls
+   */
   const handleLogout = async () => {
     if (isLoggingOut) return; // Prevent double-click
     
