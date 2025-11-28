@@ -270,11 +270,11 @@ class FrontendApiClient {
           longitude: observationData.longitude || 0,
           observation_date: observationData.date || new Date().toISOString().split('T')[0],
           notes: observationData.notes || '',
-          image_url: observationData.lepidopteraImage || null,
           is_public: true,
         })
         .select()
         .single();
+      // Send images separately to observation_images table (handled by backend)
 
       if (error) {
         console.error('❌ Supabase observation insert error:', error);

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChrysaLink Autocomplete</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            padding: 40px;
+            margin: 0;
+        }
+
+        .demo-container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .search-wrapper {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #74ac00;
+        }
+
+        /* Autocomplete Menu */
+        .ui-autocomplete {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            margin-top: 4px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-height: 400px;
+            overflow-y: auto;
+            z-index: 1000;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .ui-autocomplete li {
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Category Header */
+        .category.header-category {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .category.header-category:not(:first-child) {
+            border-top: 1px solid #e9ecef;
+            margin-top: 4px;
+        }
+
+        /* Autocomplete Result Item */
+        .ac-result {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .ac-result:hover {
+            background: #f8f9fa;
+        }
+
+        .ac-result .ac {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            position: relative;
+        }
+
+        /* Thumbnail */
+        .ac-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 6px;
+            background: #e9ecef;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .ac-thumb.has-photo img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Label Section */
+        .ac-label {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .ac-label > div {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .ac-label .title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            display: block;
+        }
+
+        .ac-label .subtitle {
+            font-size: 12px;
+            color: #666;
+            display: block;
+        }
+
+        .ac-label .subtitle i {
+            font-style: italic;
+        }
+
+        .ac-label .subtitle.vision {
+            font-size: 11px;
+            color: #74ac00;
+            font-weight: 500;
+            font-style: normal;
+        }
+
+        /* View Link */
+        .ac-view {
+            padding: 6px 12px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #666;
+            text-decoration: none;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .ac-view:hover {
+            background: #74ac00;
+            color: white;
+        }
+
+        /* Dual Species Display for ChrysaLink */
+        .dual-species {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dual-species .species-block {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .dual-species .connection-icon {
+            color: #74ac00;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .species-type-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            margin-bottom: 2px;
+        }
+
+        .species-type-badge.lepidoptera {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
+        .species-type-badge.plant {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        /* Dual Thumbnails */
+        .dual-thumbs {
+            display: flex;
+            gap: 4px;
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+        }
+
+        .dual-thumbs .thumb-half {
+            flex: 1;
+            border-radius: 4px;
+            background: #e9ecef;
+            overflow: hidden;
+        }
+
+        .dual-thumbs .thumb-half img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .info-text {
+            text-align: center;
+            color: #666;
+            font-size: 13px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="search-wrapper">
+            <input type="text" class="search-input" placeholder="Search for Lepidoptera species..." value="Wizard">
+            
+            <!-- Standard iNaturalist Style -->
+            <ul class="ui-autocomplete" style="display: block;">
+                <li class="category header-category non-option">We're pretty sure this is in the genus</li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="ac-thumb has-photo">
+                            <img alt="thumbnail" src="https://static.inaturalist.org/photos/247555687/square.jpeg">
+                        </div>
+                        <div class="ac-label">
+                            <div>
+                                <span class="title">Rhinopalpa</span>
+                                <span class="subtitle"><span>Genus </span></span>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+                
+                <li class="category header-category non-option">Here are our top suggestions</li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="ac-thumb has-photo">
+                            <img alt="thumbnail" src="https://static.inaturalist.org/photos/247555687/square.jpeg">
+                        </div>
+                        <div class="ac-label">
+                            <div>
+                                <span class="title">Wizard</span>
+                                <span class="subtitle"><i>Rhinopalpa polynice</i></span>
+                                <span class="subtitle vision">Visually Similar</span>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="ac-thumb has-photo">
+                            <img alt="thumbnail" src="https://inaturalist-open-data.s3.amazonaws.com/photos/60741957/square.jpg">
+                        </div>
+                        <div class="ac-label">
+                            <div>
+                                <span class="title">Hypanartia cinderella</span>
+                                <span class="subtitle"><span>Species </span></span>
+                                <span class="subtitle vision">Visually Similar</span>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="ac-thumb has-photo">
+                            <img alt="thumbnail" src="https://inaturalist-open-data.s3.amazonaws.com/photos/82850346/square.jpeg">
+                        </div>
+                        <div class="ac-label">
+                            <div>
+                                <span class="title">Long-tailed Admiral</span>
+                                <span class="subtitle"><i>Antanartia schaeneia</i></span>
+                                <span class="subtitle vision">Visually Similar</span>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="ac-thumb has-photo">
+                            <img alt="thumbnail" src="https://inaturalist-open-data.s3.amazonaws.com/photos/11723001/square.jpg">
+                        </div>
+                        <div class="ac-label">
+                            <div>
+                                <span class="title">Red Mapwing</span>
+                                <span class="subtitle"><i>Hypanartia kefersteini</i></span>
+                                <span class="subtitle vision">Visually Similar</span>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        <p class="info-text">↑ Standard iNaturalist-style autocomplete</p>
+
+        <!-- ChrysaLink Enhanced Version Below -->
+        <div class="search-wrapper" style="margin-top: 60px;">
+            <input type="text" class="search-input" placeholder="Search for Lepidoptera & Host Plant pairs..." value="Monarch">
+            
+            <ul class="ui-autocomplete" style="display: block;">
+                <li class="category header-category non-option">Lepidoptera & Host Plant Observations</li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="dual-thumbs">
+                            <div class="thumb-half">
+                                <img alt="Lepidoptera" src="https://images.unsplash.com/photo-1594549857526-37382d966c6d?w=100">
+                            </div>
+                            <div class="thumb-half">
+                                <img alt="Host Plant" src="https://images.unsplash.com/photo-1466781783364-36c955e42a7f?w=100">
+                            </div>
+                        </div>
+                        <div class="ac-label">
+                            <div class="dual-species">
+                                <div class="species-block">
+                                    <span class="species-type-badge lepidoptera"><i class="fa-solid fa-bug"></i> Lepidoptera</span>
+                                    <span class="title">Monarch Butterfly</span>
+                                    <span class="subtitle"><i>Danaus plexippus</i></span>
+                                </div>
+                                <div class="connection-icon">
+                                    <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                                </div>
+                                <div class="species-block">
+                                    <span class="species-type-badge plant"><i class="fa-solid fa-leaf"></i> Host</span>
+                                    <span class="title">Milkweed</span>
+                                    <span class="subtitle"><i>Asclepias syriaca</i></span>
+                                </div>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="dual-thumbs">
+                            <div class="thumb-half">
+                                <img alt="Lepidoptera" src="https://inaturalist-open-data.s3.amazonaws.com/photos/594633562/medium.jpg">
+                            </div>
+                            <div class="thumb-half">
+                                <img alt="Host Plant" src="https://images.unsplash.com/photo-1530836369250-ef72a3f5cda8?w=100">
+                            </div>
+                        </div>
+                        <div class="ac-label">
+                            <div class="dual-species">
+                                <div class="species-block">
+                                    <span class="species-type-badge lepidoptera"><i class="fa-solid fa-bug"></i> Lepidoptera</span>
+                                    <span class="title">Australian Armyworm</span>
+                                    <span class="subtitle"><i>Mythimna convecta</i></span>
+                                </div>
+                                <div class="connection-icon">
+                                    <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                                </div>
+                                <div class="species-block">
+                                    <span class="species-type-badge plant"><i class="fa-solid fa-leaf"></i> Host</span>
+                                    <span class="title">Common Grass</span>
+                                    <span class="subtitle"><i>Poa annua</i></span>
+                                </div>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+                
+                <li class="ac-result taxon ui-menu-item">
+                    <div class="ac vision">
+                        <div class="dual-thumbs">
+                            <div class="thumb-half">
+                                <img alt="Lepidoptera" src="https://images.unsplash.com/photo-1526336024174-e58f5cdd8e13?w=100">
+                            </div>
+                            <div class="thumb-half">
+                                <img alt="Host Plant" src="https://images.unsplash.com/photo-1615671524827-c1fe3973b648?w=100">
+                            </div>
+                        </div>
+                        <div class="ac-label">
+                            <div class="dual-species">
+                                <div class="species-block">
+                                    <span class="species-type-badge lepidoptera"><i class="fa-solid fa-bug"></i> Lepidoptera</span>
+                                    <span class="title">Swallowtail</span>
+                                    <span class="subtitle"><i>Papilio machaon</i></span>
+                                </div>
+                                <div class="connection-icon">
+                                    <i class="fa-solid fa-arrow-right-arrow-left"></i>
+                                </div>
+                                <div class="species-block">
+                                    <span class="species-type-badge plant"><i class="fa-solid fa-leaf"></i> Host</span>
+                                    <span class="title">Fennel</span>
+                                    <span class="subtitle"><i>Foeniculum vulgare</i></span>
+                                </div>
+                            </div>
+                        </div>
+                        <a target="_blank" rel="noopener noreferrer" href="#" class="ac-view">View</a>
+                    </div>
+                </li>
+            </ul>
+        </div>
+
+        <p class="info-text">↑ ChrysaLink-enhanced autocomplete showing Lepidoptera-Host Plant pairs</p>
+    </div>
+</body>
+</html>
