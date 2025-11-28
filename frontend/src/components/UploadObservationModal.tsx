@@ -18,8 +18,8 @@ interface UploadObservationModalProps {
 
 export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess }: UploadObservationModalProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const [lepidopteraImage, setLepidopteraImage] = useState('');
-  const [hostPlantImage, setHostPlantImage] = useState('');
+  const [lepidopteraImages, setLepidopteraImages] = useState<string[]>([]);
+  const [hostPlantImages, setHostPlantImages] = useState<string[]>([]);
   const [lepidopteraSpecies, setLepidopteraSpecies] = useState('');
   const [hostPlantSpecies, setHostPlantSpecies] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -78,19 +78,19 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   };
 
   const handleImageUpload = (type: 'lepidoptera' | 'hostPlant') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    const files = Array.from(e.target.files || []);
+    files.forEach(file => {
       const reader = new FileReader();
       reader.onloadend = () => {
         const base64 = reader.result as string;
         if (type === 'lepidoptera') {
-          setLepidopteraImage(base64);
+          setLepidopteraImages(prev => [...prev, base64]);
         } else {
-          setHostPlantImage(base64);
+          setHostPlantImages(prev => [...prev, base64]);
         }
       };
       reader.readAsDataURL(file);
-    }
+    });
   };
 
   const getCurrentLocation = () => {
@@ -120,9 +120,9 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       let response = await apiClient.post(
         '/observations',
         {
-          lepidopteraImage,
+          lepidopteraImages,
           lepidopteraSpecies,
-          hostPlantImage,
+          hostPlantImages,
           hostPlantSpecies,
           date,
           location,
@@ -150,9 +150,9 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
 
         response = await apiClient.createObservation(
           {
-            lepidopteraImage,
+            lepidopteraImages,
             lepidopteraSpecies,
-            hostPlantImage,
+            hostPlantImages,
             hostPlantSpecies,
             date,
             location,
@@ -173,8 +173,8 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       onClose();
       
       // Reset form
-      setLepidopteraImage('');
-      setHostPlantImage('');
+      setLepidopteraImages([]);
+      setHostPlantImages([]);
       setLepidopteraSpecies('');
       setHostPlantSpecies('');
       setLocation('');
@@ -189,8 +189,18 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
     }
   };
 
+  // Prevent closing on outside click
+  const [internalOpen, setInternalOpen] = useState(isOpen);
+  useEffect(() => { setInternalOpen(isOpen); }, [isOpen]);
+  const handleOpenChange = (open: boolean) => {
+    // Only allow closing if explicitly triggered (Cancel or X button)
+    if (!open && internalOpen) {
+      // Do nothing (ignore outside click)
+      setInternalOpen(true);
+    }
+  };
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={internalOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="!max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Upload Observation</DialogTitle>
@@ -205,33 +215,56 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
               <div>
                 <Label htmlFor="lepidoptera-image">Image</Label>
                 <div className="mt-2">
-                  {lepidopteraImage ? (
-                    <div className="relative">
-                      <img src={lepidopteraImage} alt="Lepidoptera" className="w-full h-48 object-cover rounded" />
-                      <button
-                        type="button"
-                        className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
-                        onClick={() => setLepidopteraImage('')}
-                        title="Remove image"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
-                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-500">Click to upload</span>
-                      <input
-                        id="lepidoptera-image"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleImageUpload('lepidoptera')}
-                      />
-                    </label>
-                  )}
+                  <div className="relative">
+                    {lepidopteraImages.length > 0 && (
+                      <>
+                        <img src={lepidopteraImages[0]} alt="Lepidoptera" className="w-full h-48 object-cover rounded" />
+                        <div className="flex gap-2 mt-2 flex-wrap">
+                          {lepidopteraImages.map((img, idx) => (
+                            <img key={idx} src={img} alt={`Lepidoptera ${idx+1}`} className="w-12 h-12 object-cover rounded border" />
+                          ))}
+                          {lepidopteraImages.length < 10 && (
+                            <label className="flex flex-col items-center justify-center w-12 h-12 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ml-2">
+                              <Upload className="h-5 w-5 text-gray-400 mb-1" />
+                              <span className="text-xs text-gray-500">Add</span>
+                              <input
+                                id="lepidoptera-image-add"
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={handleImageUpload('lepidoptera')}
+                              />
+                            </label>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
+                          onClick={() => setLepidopteraImages([])}
+                          title="Remove all images"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </>
+                    )}
+                    {lepidopteraImages.length === 0 && (
+                      <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
+                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                        <span className="text-sm text-gray-500">Click to upload</span>
+                        <input
+                          id="lepidoptera-image"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleImageUpload('lepidoptera')}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -290,33 +323,56 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
               <div>
                 <Label htmlFor="hostplant-image">Image</Label>
                 <div className="mt-2">
-                  {hostPlantImage ? (
-                    <div className="relative">
-                      <img src={hostPlantImage} alt="Host Plant" className="w-full h-48 object-cover rounded" />
-                      <button
-                        type="button"
-                        className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
-                        onClick={() => setHostPlantImage('')}
-                        title="Remove image"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
-                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                      <span className="text-sm text-gray-500">Click to upload</span>
-                      <input
-                        id="hostplant-image"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleImageUpload('hostPlant')}
-                      />
-                    </label>
-                  )}
+                  <div className="relative">
+                    {hostPlantImages.length > 0 && (
+                      <>
+                        <img src={hostPlantImages[0]} alt="Host Plant" className="w-full h-48 object-cover rounded" />
+                        <div className="flex gap-2 mt-2 flex-wrap">
+                          {hostPlantImages.map((img, idx) => (
+                            <img key={idx} src={img} alt={`Host Plant ${idx+1}`} className="w-12 h-12 object-cover rounded border" />
+                          ))}
+                          {hostPlantImages.length < 10 && (
+                            <label className="flex flex-col items-center justify-center w-12 h-12 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ml-2">
+                              <Upload className="h-5 w-5 text-gray-400 mb-1" />
+                              <span className="text-xs text-gray-500">Add</span>
+                              <input
+                                id="hostplant-image-add"
+                                type="file"
+                                accept="image/*"
+                                multiple
+                                className="hidden"
+                                onChange={handleImageUpload('hostPlant')}
+                              />
+                            </label>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full p-1 transition-colors"
+                          onClick={() => setHostPlantImages([])}
+                          title="Remove all images"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </>
+                    )}
+                    {hostPlantImages.length === 0 && (
+                      <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
+                        <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                        <span className="text-sm text-gray-500">Click to upload</span>
+                        <input
+                          id="hostplant-image"
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleImageUpload('hostPlant')}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
               </div>
 

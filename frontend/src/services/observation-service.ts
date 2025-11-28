@@ -7,9 +7,9 @@ import { apiClient } from '../api/client';
  */
 
 export interface CreateObservationData {
-  lepidopteraImage: string;
+  lepidopteraImages: string[];
   lepidopteraSpecies: string;
-  hostPlantImage: string;
+  hostPlantImages: string[];
   hostPlantSpecies: string;
   date: string;
   location: string;

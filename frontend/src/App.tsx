@@ -48,7 +48,7 @@ export default function App() {
           setUserId(null);
           localStorage.removeItem('accessToken');
           localStorage.removeItem('userId');
-          setLocation('/');
+          setLocation('/auth');
         }
       }
     );
