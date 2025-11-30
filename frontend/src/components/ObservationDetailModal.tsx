@@ -1,14 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
-import { Badge } from './ui/badge';
-import { Avatar, AvatarFallback } from './ui/avatar';
-import { MapPin, Calendar, CheckCircle, MessageSquare } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { CheckCircle, ArrowRightLeft, MapPin, Calendar, Clock } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { toast } from 'sonner';
-import { Separator } from './ui/separator';
 import { apiClient } from '../api/client';
+import { supabase } from '../lib/supabase';
 
 interface ObservationDetailModalProps {
   observation: any;
@@ -27,408 +27,350 @@ export function ObservationDetailModal({
   currentUserId,
   onUpdate
 }: ObservationDetailModalProps) {
+  // --- State ---
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localObservation, setLocalObservation] = useState(observation);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editValues, setEditValues] = useState({
-    lepidopteraSpecies: observation?.lepidoptera?.species || '',
-    hostPlantSpecies: observation?.hostPlant?.species || '',
-    notes: observation?.notes || '',
-    location: observation?.location || '',
-    date: observation?.date ? new Date(observation.date).toISOString().slice(0,10) : ''
-  });
+  const [suggestSpecies, setSuggestSpecies] = useState('');
+  const [suggestReason, setSuggestReason] = useState('');
+  const [activeTab, setActiveTab] = useState('comment');
+  const [suggestType, setSuggestType] = useState<'lepidoptera' | 'hostPlant'>('lepidoptera');
 
   useEffect(() => {
     setLocalObservation(observation);
-    setEditValues({
-      lepidopteraSpecies: observation?.lepidoptera?.species || '',
-      hostPlantSpecies: observation?.hostPlant?.species || '',
-      notes: observation?.notes || '',
-      location: observation?.location || '',
-      date: observation?.date ? new Date(observation.date).toISOString().slice(0,10) : ''
-    });
   }, [observation]);
 
+  // Activity feed combines comments and identifications, sorted by date
+  const activityFeed = useMemo(() => {
+    const comments = (localObservation.comments || []).map((c: any) => ({
+      type: 'comment',
+      id: c.id,
+      date: new Date(c.createdAt || c.created_at),
+      user: { name: c.userName, avatar: c.userAvatar },
+      content: c.text
+    }));
+    const identifications = (localObservation.identifications || []).map((i: any) => ({
+      type: 'identification',
+      subtype: i.identificationType || (i.species === localObservation?.lepidoptera?.species ? 'lepidoptera' : 'hostPlant'),
+      id: i.id,
+      date: new Date(i.createdAt || i.created_at),
+      user: { name: i.userName, avatar: i.userAvatar },
+      species: i.species,
+      scientificName: i.scientificName,
+      verified: i.verified,
+      thumb: i.taxonThumb
+    }));
+    return [...comments, ...identifications].sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [localObservation]);
+
+  // Fetch observation details from API
+  const fetchObservationDetails = async () => {
+    try {
+      const response = await apiClient.get(`/observations/${observation.id}`, accessToken);
+      if (response.success) setLocalObservation(response.data);
+    } catch (error) {
+      toast.error('Failed to fetch observation');
+    }
+  };
+
+  // Add a comment
   const handleAddComment = async () => {
     if (!comment.trim() || !accessToken) return;
-
     setIsSubmitting(true);
     try {
-      const response = await apiClient.post(
-        `/observations/${observation.id}/comments`,
-        { text: comment },
-        accessToken
-      );
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to add comment');
+      const response = await apiClient.post(`/observations/${observation.id}/comments`, { text: comment }, accessToken);
+      if (response.success) {
+        toast.success('Comment added!');
+        setComment('');
+        fetchObservationDetails();
+        onUpdate();
+      } else {
+        toast.error(response.error || 'Failed to add comment');
       }
-
-      toast.success('Comment added!');
-      setComment('');
-      
-      // Refresh the observation data
-      fetchObservationDetails();
-      onUpdate();
     } catch (error: any) {
-      console.error('Error adding comment:', error);
       toast.error(error.message || 'Failed to add comment');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const fetchObservationDetails = async () => {
-    try {
-      const response = await apiClient.get(
-        `/observations/${observation.id}`,
-        accessToken
-      );
-
-      if (response.success) {
-        setLocalObservation(response.data);
-      }
-    } catch (error) {
-      console.error('Error fetching observation details:', error);
-    }
+  // Suggest an ID (stub)
+  const handleSuggestID = async () => {
+    if (!suggestSpecies.trim() || !accessToken) return;
+    toast.success(`Suggested ${suggestType} ID: ${suggestSpecies}`);
+    setSuggestSpecies('');
+    setSuggestReason('');
   };
 
-  const isOwner = !!(currentUserId && localObservation?.user && currentUserId === localObservation.user.id);
-
-  const handleSaveEdit = async () => {
-    if (!accessToken) {
-      toast.error('Sign in to edit');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const payload: any = {
-        lepidoptera: { species: editValues.lepidopteraSpecies },
-        hostPlant: { species: editValues.hostPlantSpecies },
-        notes: editValues.notes,
-        location: editValues.location,
-        date: editValues.date
-      };
-
-      const response = await apiClient.put(
-        `/observations/${localObservation.id}`,
-        payload,
-        accessToken
-      );
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to update observation');
-      }
-
-      const text = await response.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch (e) {
-        data = text;
-      }
-
-      if (!response.ok) {
-        const msg = data && typeof data === 'object' && data.error ? data.error : (typeof data === 'string' && data.length ? data : 'Failed to update observation');
-        throw new Error(msg);
-      }
-
-      toast.success('Observation updated');
-      setIsEditing(false);
-      // refresh details
-      fetchObservationDetails();
-      onUpdate();
-    } catch (err: any) {
-      console.error('Update error', err);
-      toast.error(err.message || 'Failed to update');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
+  // Delete observation
   const handleDelete = async () => {
-    if (!accessToken) {
-      toast.error('Sign in to delete');
-      return;
-    }
-
-    const ok = window.confirm('Are you sure you want to delete this observation? This cannot be undone.');
-    if (!ok) {
-      return;
-    }
-
+    if (!window.confirm('Delete this observation?')) return;
     setIsSubmitting(true);
     try {
-      // Try the serverless function first
-      const response = await fetch(
-        `https://${projectId}.supabase.co/functions/v1/make-server-b55216b3/observations/${localObservation.id}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.ok) {
-        toast.success('Observation deleted successfully');
+      const response = await apiClient.delete(`/observations/${localObservation.id}`, accessToken);
+      if (response.success || response.status === 404) {
+        toast.success('Deleted');
         onClose();
         onUpdate();
-        return;
-      }
-
-      // If serverless function fails, try direct Supabase delete
-      if (response.status === 404 || response.status === 502) {
-        console.log('Serverless function not available, trying direct delete...');
-        
-        const supabase = getSupabaseClient();
-        const { error } = await supabase
-          .from('kv_store_b55216b3')
-          .delete()
-          .eq('key', `obs:${localObservation.id}`);
-
-        if (error) {
-          throw new Error(error.message || 'Failed to delete from database');
-        }
-
-        toast.success('Observation deleted successfully');
-        setIsSubmitting(false);
+      } else {
+        const { error } = await supabase.from('observations').delete().eq('id', localObservation.id);
+        if (error) throw error;
+        toast.success('Deleted');
         onClose();
-        // Add a slight delay to ensure the modal closes before refresh
-        setTimeout(() => onUpdate(), 300);
-        return;
+        onUpdate();
       }
-
-      // Handle other errors
-      const text = await response.text();
-      let data: any = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch (e) {
-        data = text;
-      }
-
-      const msg = data && typeof data === 'object' && data.error ? data.error : (typeof data === 'string' && data.length ? data : `Failed to delete (${response.status})`);
-      throw new Error(msg);
-    } catch (err: any) {
-      console.error('Delete error:', err);
-      toast.error(err.message || 'Failed to delete observation. Please try again.');
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to delete observation');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Helper values
+  // Show the current identification names
+  const lepName = localObservation.lepidoptera_current_identification || 'Unknown Lepidoptera';
+  const plantName = localObservation.plant_current_identification || 'Unknown Plant';
+  // Use observationDate for consistency with HomePage, now also checks observation_date
+  const observationDate = localObservation.observed_at
+    ? new Date(localObservation.observed_at)
+    : localObservation.date_observed
+      ? new Date(localObservation.date_observed)
+      : localObservation.date
+        ? new Date(localObservation.date)
+        : localObservation.observation_date
+          ? new Date(localObservation.observation_date)
+          : null;
+  const submittedDate = localObservation.created_at ? new Date(localObservation.created_at) : null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Observation Details</DialogTitle>
-        </DialogHeader>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+        
+        {/* Header Title */}
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+          <DialogTitle className="text-lg font-bold text-center flex items-center justify-center gap-2 text-gray-800">
+            <span className="text-amber-700">{lepName}</span>
+            <ArrowRightLeft className="h-4 w-4 text-gray-400" />
+            <span className="text-green-700">{plantName}</span>
+          </DialogTitle>
+        </div>
 
-        {/* Observation Header */}
-        <div className="bg-white rounded-lg p-6 mb-6">
-          <div className="mb-4">
-            <h2 className="text-2xl font-bold mb-1 flex items-center">
-              <span className="mr-2">{localObservation.hostPlant?.commonName || 'Unknown Plant'}</span>
-              <span className="italic text-gray-600 mr-2">{localObservation.hostPlant?.species || ''}</span>
-              <span className="bg-gray-200 rounded px-2 py-1 text-xs ml-2">{localObservation.quality || 'Casual'}</span>
-            </h2>
-          </div>
-
-          {/* Two Image Panels Side by Side */}
-          <div className="flex gap-6 mb-6">
-            {/* Lepidoptera Image */}
-            <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden">
-              <div className="w-full h-72 bg-gray-100" style={{backgroundImage: localObservation.lepidoptera?.image ? `url('${localObservation.lepidoptera.image}')` : undefined, backgroundSize: 'cover', backgroundPosition: 'center'}}>
-                {!localObservation.lepidoptera?.image && (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">No image</div>
-                )}
+        <div className="p-6 space-y-6">
+          
+          {/* --- 1. Images & Identifications Row --- */}
+          <div className="grid grid-cols-2 gap-6">
+            {/* Left: Lepidoptera */}
+            <div className="flex flex-col gap-2">
+              <div className="w-full h-64 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 relative shadow-sm flex items-center justify-center">
+                 {localObservation.lepidoptera?.image || localObservation.image_url ? (
+                   <img 
+                     src={localObservation.lepidoptera?.image || localObservation.image_url} 
+                     alt="Lepidoptera" 
+                     className="w-full h-full object-cover"
+                   />
+                 ) : (
+                   <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">No Image</div>
+                 )}
+                 {/* Removed overlay label */}
               </div>
-              <div className="p-3 bg-gray-50 border-t border-gray-200">
-                <h4 className="font-semibold mb-1"><span className="italic text-gray-700">{localObservation.lepidoptera?.species || 'Unknown Lepidoptera'}</span></h4>
-                <div className="text-sm text-gray-500 flex items-center"><CheckCircle className="h-4 w-4 mr-1" /> {localObservation.lepidoptera?.identifications?.length || 0} identification(s)</div>
-              </div>
-            </div>
-
-            {/* Host Plant Image */}
-            <div className="flex-1 border border-gray-200 rounded-lg overflow-hidden">
-              <div className="w-full h-72 bg-gray-100" style={{backgroundImage: localObservation.hostPlant?.image ? `url('${localObservation.hostPlant.image}')` : undefined, backgroundSize: 'cover', backgroundPosition: 'center'}}>
-                {!localObservation.hostPlant?.image && (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">No image</div>
-                )}
-              </div>
-              <div className="p-3 bg-gray-50 border-t border-gray-200">
-                <h4 className="font-semibold mb-1">Host Plant</h4>
-                <div className="text-sm text-gray-500 flex items-center"><CheckCircle className="h-4 w-4 mr-1" /> {localObservation.hostPlant?.identifications?.length || 0} identification(s)</div>
+              <div className="text-left">
+                <div className="font-bold text-gray-900 text-lg leading-tight">{lepName}</div>
+                <div className="text-sm text-gray-500 font-medium mt-1">
+                   {localObservation.lepidoptera?.identifications?.length || 0} identification(s)
+                </div>
               </div>
             </div>
+
+            {/* Right: Host Plant */}
+            <div className="flex flex-col gap-2">
+              <div className="w-full h-64 bg-gray-100 rounded-lg overflow-hidden border border-gray-200 relative shadow-sm flex items-center justify-center">
+                 {localObservation.hostPlant?.image || localObservation.plant_image_url ? (
+                   <img 
+                     src={localObservation.hostPlant?.image || localObservation.plant_image_url} 
+                     alt="Host Plant" 
+                     className="w-full h-full object-cover"
+                   />
+                 ) : (
+                   <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">No Image</div>
+                 )}
+                 {/* Removed overlay label */}
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-gray-900 text-lg leading-tight">{plantName}</div>
+                <div className="text-sm text-gray-500 font-medium mt-1">
+                   {localObservation.hostPlant?.identifications?.length || 0} identification(s)
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* User Info */}
+          {/* --- 2. User Profile Row --- */}
           {localObservation.user && (
-            <div className="flex items-center py-4 border-b border-gray-100">
-              <div className="w-12 h-12 rounded-full bg-gray-200 mr-4" style={{backgroundImage: localObservation.user.avatar ? `url('${localObservation.user.avatar}')` : undefined, backgroundSize: 'cover', backgroundPosition: 'center'}}></div>
-              <div>
-                <h4 className="font-semibold text-base mb-1"><a href="#" className="hover:underline">{localObservation.user.name}</a></h4>
-                <div className="text-sm text-gray-500"><CheckCircle className="h-4 w-4 mr-1 inline" /> {localObservation.user.observationCount || 0} observations</div>
+            <div className="flex items-center p-2">
+              <Avatar className="h-12 w-12 border-2 border-white shadow-sm mr-3">
+                <AvatarImage src={localObservation.user.avatar || localObservation.user.avatar_url} />
+                <AvatarFallback>{localObservation.user.username?.[0] || localObservation.user.name?.[0] || 'U'}</AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col ml-2 items-start">
+                <span className="font-bold text-base text-gray-900 text-left">{localObservation.user.username || localObservation.user.name || localObservation.user.fullName || 'Unknown User'}</span>
+                <span className="text-sm text-gray-500 font-medium text-left">
+                  {localObservation.user.observationCount || 0} observations
+                </span>
               </div>
-            </div>
-          )}
-
-          {/* Observation Details */}
-          <div className="flex gap-8 py-4 border-b border-gray-100">
-            <div className="text-sm">
-              <strong className="block text-gray-600 mb-1">Observed:</strong>
-              {localObservation.date ? new Date(localObservation.date).toLocaleString() : 'Unknown'}
-            </div>
-            <div className="text-sm">
-              <strong className="block text-gray-600 mb-1">Location:</strong>
-              {localObservation.location || 'Unknown location'}
-            </div>
-          </div>
-
-          {/* Notes */}
-          {localObservation.notes && (
-            <div className="py-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-500 mb-1">Notes</p>
-                <p className="text-gray-700">{localObservation.notes}</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Activity Section: Identifications */}
-        <div className="bg-white rounded-lg p-6 mb-6">
-          <h3 className="text-xl font-semibold mb-4">Activity</h3>
-          {localObservation.identifications && localObservation.identifications.length > 0 ? (
-            <div>
-              {localObservation.identifications.map((ident: any) => (
-                <div key={ident.id} className="flex gap-4 mb-6 pb-6 border-b border-gray-100">
-                  <div className="w-10 h-10 rounded-full bg-gray-200" style={{backgroundImage: ident.userAvatar ? `url('${ident.userAvatar}')` : undefined, backgroundSize: 'cover', backgroundPosition: 'center'}}></div>
-                  <div className="flex-1">
-                    <div className="mb-2 flex items-center">
-                      <span className="font-semibold mr-2">{ident.userName}</span>
-                      <span className="text-xs text-gray-500">suggested an ID</span>
-                      {ident.verified && <span className="bg-green-500 text-white rounded px-2 py-1 text-xs ml-2">Verified</span>}
-                      <span className="text-xs text-gray-400 ml-2">{ident.createdAt ? new Date(ident.createdAt).toLocaleString() : ''}</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-gray-50 rounded p-2">
-                      <div className="w-12 h-12 rounded bg-gray-200" style={{backgroundImage: ident.taxonThumb ? `url('${ident.taxonThumb}')` : undefined, backgroundSize: 'cover', backgroundPosition: 'center'}}></div>
-                      <div>
-                        <strong>{ident.species}</strong>
-                        <span className="italic text-gray-600 ml-2">{ident.scientificName}</span>
-                      </div>
-                      <Button variant="success" size="sm" className="ml-2">Agree</Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-gray-400">No identifications yet.</div>
-          )}
-        </div>
-
-        {/* Comments Section */}
-        <div className="bg-white rounded-lg p-6 mb-6">
-          <h3 className="text-xl font-semibold mb-4">Comments ({localObservation.comments?.length || 0})</h3>
-          {localObservation.comments && localObservation.comments.length > 0 ? (
-            <div className="space-y-4 mb-4">
-              {localObservation.comments.map((comment: any) => (
-                <div key={comment.id} className="flex gap-4">
-                  <div className="w-10 h-10 rounded-full bg-gray-200" style={{backgroundImage: comment.userAvatar ? `url('${comment.userAvatar}')` : undefined, backgroundSize: 'cover', backgroundPosition: 'center'}}></div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-sm">{comment.userName}</span>
-                      <span className="text-xs text-gray-500">{comment.createdAt ? new Date(comment.createdAt).toLocaleString() : ''}</span>
-                    </div>
-                    <p className="text-sm text-gray-700">{comment.text}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-gray-400">No comments yet.</div>
-          )}
-
-          {accessToken ? (
-            <div className="mt-4">
-              <Textarea
-                placeholder="Add a comment..."
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                rows={3}
-              />
-              <Button
-                onClick={handleAddComment}
-                disabled={!comment.trim() || isSubmitting}
-                className="w-full mt-2"
-              >
-                {isSubmitting ? 'Adding...' : 'Add Comment'}
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500 text-center py-4">Sign in to add comments</p>
-          )}
-        </div>
-
-        {/* Owner actions: Edit / Delete */}
-        {isOwner && (
-          <div className="flex items-center justify-end gap-2 mb-6">
-            {!isEditing ? (
-              <>
-                <Button variant="ghost" onClick={() => setIsEditing(true)}>Edit</Button>
-                <Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
-                  {isSubmitting ? 'Deleting...' : 'Delete'}
+              {/* Owner Actions */}
+              {currentUserId === localObservation.user.id && (
+                <Button variant="ghost" size="sm" className="ml-auto text-blue-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => setActiveTab('edit')}>
+                  Edit
                 </Button>
-              </>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button onClick={handleSaveEdit} disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Save'}</Button>
-                <Button variant="ghost" onClick={() => { setIsEditing(false); setEditValues({
-                  lepidopteraSpecies: localObservation?.lepidoptera?.species || '',
-                  hostPlantSpecies: localObservation?.hostPlant?.species || '',
-                  notes: localObservation?.notes || '',
-                  location: localObservation?.location || '',
-                  date: localObservation?.date ? new Date(localObservation.date).toISOString().slice(0,10) : ''
-                }); }}>Cancel</Button>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {/* If editing, show form fields to edit some attributes */}
-        {isEditing && (
-          <div className="bg-white rounded-lg p-6 mb-6">
-            <h3 className="font-semibold mb-4">Edit Observation</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-500">Lepidoptera species</label>
-                <Input value={editValues.lepidopteraSpecies} onChange={(e: any) => setEditValues({...editValues, lepidopteraSpecies: e.target.value})} />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Host plant species</label>
-                <Input value={editValues.hostPlantSpecies} onChange={(e: any) => setEditValues({...editValues, hostPlantSpecies: e.target.value})} />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Location</label>
-                <Input value={editValues.location} onChange={(e: any) => setEditValues({...editValues, location: e.target.value})} />
-              </div>
-              <div>
-                <label className="text-sm text-gray-500">Date</label>
-                <Input type="date" value={editValues.date} onChange={(e: any) => setEditValues({...editValues, date: e.target.value})} />
-              </div>
-              <div className="md:col-span-2">
-                <label className="text-sm text-gray-500">Notes</label>
-                <Textarea value={editValues.notes} onChange={(e: any) => setEditValues({...editValues, notes: e.target.value})} rows={4} />
-              </div>
+          {/* --- 3. Details Row (Observed, Submitted, Location) --- */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-b border-gray-100 py-4 bg-gray-50/30 rounded-lg px-4">
+             {/* Observed */}
+             <div className="flex flex-col">
+               <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1 flex items-center gap-1">
+                 <Calendar className="h-3 w-3" /> Observed
+               </span>
+               <span className="text-sm font-medium text-gray-900">
+                 {observationDate ? observationDate.toLocaleString() : 'Unknown'}
+               </span>
+             </div>
+
+             {/* Submitted */}
+             <div className="flex flex-col">
+               <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1 flex items-center gap-1">
+                 <Clock className="h-3 w-3" /> Submitted
+               </span>
+               <span className="text-sm font-medium text-gray-900">
+                 {submittedDate ? submittedDate.toLocaleString() : 'Unknown'}
+               </span>
+             </div>
+
+             {/* Location */}
+             <div className="flex flex-col">
+               <span className="text-[10px] uppercase tracking-wider font-bold text-gray-500 mb-1 flex items-center gap-1">
+                 <MapPin className="h-3 w-3" /> Location
+               </span>
+               <span className="text-sm font-medium text-gray-900 truncate" title={localObservation.location}>
+                 {localObservation.location || 'Unknown Location'}
+               </span>
+             </div>
+          </div>
+
+          {/* --- 4. Activity Feed --- */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-gray-900">Activity</h3>
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+              {activityFeed.length === 0 ? (
+                <p className="text-gray-400 text-sm italic">No activity yet. Be the first to comment!</p>
+              ) : (
+                activityFeed.map((item: any) => (
+                  <div key={`${item.type}-${item.id}`} className="flex gap-3 text-sm group">
+                    <Avatar className="h-8 w-8 mt-1">
+                      <AvatarImage src={item.user.avatar} />
+                      <AvatarFallback>{item.user.name?.[0]}</AvatarFallback>
+                    </Avatar>
+                    
+                    <div className="flex-1 space-y-1">
+                      <div className="flex items-baseline justify-between">
+                        <span className="font-semibold text-gray-900">{item.user.name}</span>
+                        <span className="text-xs text-gray-400">{item.date.toLocaleDateString()}</span>
+                      </div>
+                      
+                      {item.type === 'identification' ? (
+                        <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-100 text-gray-800">
+                          <span className="text-amber-700 font-medium">Suggested ID:</span>
+                          <div className="font-bold mt-1 text-lg flex items-center gap-2">
+                             {item.thumb && <img src={item.thumb} className="w-8 h-8 rounded object-cover" alt="Taxon thumbnail" />}
+                             {item.species} 
+                          </div>
+                          <div className="text-xs text-gray-500 italic">{item.scientificName}</div>
+                        </div>
+                      ) : (
+                        <div className="text-gray-700">
+                          {item.content}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-        )}
+
+          {/* --- 5. Interaction Tabs --- */}
+          <div className="border-t border-gray-100 pt-4">
+            <Tabs defaultValue="comment" value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="comment">Comment</TabsTrigger>
+                <TabsTrigger value="suggest">Suggest ID</TabsTrigger>
+              </TabsList>
+
+              {/* Comment Tab Content */}
+              <TabsContent value="comment" className="space-y-3">
+                <Textarea 
+                  placeholder="Leave a comment..." 
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  className="min-h-[100px]"
+                />
+                <Button 
+                  className="w-full" 
+                  onClick={handleAddComment} 
+                  disabled={!accessToken || isSubmitting || !comment.trim()}
+                >
+                  {isSubmitting ? 'Posting...' : 'Post Comment'}
+                </Button>
+                {!accessToken && <p className="text-xs text-center text-gray-400">Please sign in to comment</p>}
+              </TabsContent>
+
+              {/* Suggest ID Tab Content */}
+              <TabsContent value="suggest" className="space-y-4">
+                <div className="flex justify-center mb-2">
+                  <div className="inline-flex rounded-md shadow-sm" role="group">
+                    <button 
+                      type="button" 
+                      className={`px-4 py-2 text-sm font-medium border rounded-l-lg ${suggestType === 'lepidoptera' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                      onClick={() => setSuggestType('lepidoptera')}
+                    >
+                      Lepidoptera
+                    </button>
+                    <button 
+                      type="button" 
+                      className={`px-4 py-2 text-sm font-medium border rounded-r-lg ${suggestType === 'hostPlant' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                      onClick={() => setSuggestType('hostPlant')}
+                    >
+                      Host Plant
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Input 
+                    placeholder={`Species name (${suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Host Plant'})...`}
+                    value={suggestSpecies}
+                    onChange={(e) => setSuggestSpecies(e.target.value)}
+                  />
+                  <Textarea 
+                    placeholder="Tell us why..." 
+                    value={suggestReason}
+                    onChange={(e) => setSuggestReason(e.target.value)}
+                  />
+                  <Button 
+                    className={`w-full ${suggestType === 'lepidoptera' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'}`}
+                    onClick={handleSuggestID}
+                    disabled={!accessToken || !suggestSpecies.trim()}
+                  >
+                    Suggest {suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Plant'} ID
+                  </Button>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -135,9 +135,10 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
             // Data accessors aligned with ExplorePage.tsx and the backend response
             const lepidopteraImage = obs.lepidoptera_image_url || obs.image_url;
             const plantImage = obs.plant_image_url;
-            
-            const lepidopteraName = obs.lepidoptera?.common_name || obs.lepidoptera?.scientific_name || 'Lepidoptera';
-            const hostPlantName = obs.plant?.common_name || obs.plant?.scientific_name || 'Host Plant';
+
+            // Use current identification fields as main display
+            const lepidopteraName = obs.lepidoptera_current_identification || 'Lepidoptera';
+            const hostPlantName = obs.plant_current_identification || 'Host Plant';
 
             const userName = obs.user?.name || obs.user?.username || 'User' + (obs.user_id?.substring(0, 8) || '');
             const observationDate = new Date(obs.observation_date || obs.created_at).toLocaleDateString('en-US', {
@@ -166,28 +167,40 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
                   </div>
 
                   {/* Image Section */}
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    {/* Lepidoptera */}
-                    <div>
-                      <div className="w-full aspect-square relative rounded-md overflow-hidden bg-gray-100">
+                  <div className="mb-4 space-y-2">
+                    {/* Lepidoptera Row */}
+                    <div className="flex flex-row items-center gap-3">
+                      <div className="w-24 h-24 relative rounded-md overflow-hidden bg-gray-100 flex items-center justify-center">
                         {lepidopteraImage ? (
                           <img src={lepidopteraImage} alt={lepidopteraName} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
                         )}
                       </div>
-                      <p className="mt-2 text-sm font-semibold text-gray-800 italic truncate" title={lepidopteraName}>{lepidopteraName}</p>
+                      <div className="flex flex-col items-start ml-2">
+                        <span className="font-semibold text-gray-800">Lepidoptera</span>
+                        <span className="text-sm text-gray-700 italic truncate" title={lepidopteraName}>{lepidopteraName}</span>
+                        <Badge variant="secondary" className="text-xs mt-1">
+                          {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
+                        </Badge>
+                      </div>
                     </div>
-                    {/* Host Plant */}
-                    <div>
-                       <div className="w-full aspect-square relative rounded-md overflow-hidden bg-gray-100">
+                    {/* Host Plant Row */}
+                    <div className="flex flex-row items-center gap-3">
+                      <div className="w-24 h-24 relative rounded-md overflow-hidden bg-gray-100 flex items-center justify-center">
                         {plantImage ? (
                           <img src={plantImage} alt={hostPlantName} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
                         )}
                       </div>
-                      <p className="mt-2 text-sm font-semibold text-gray-800 truncate" title={hostPlantName}>{hostPlantName}</p>
+                      <div className="flex flex-col items-start ml-2">
+                        <span className="font-semibold text-gray-800">Host Plant</span>
+                        <span className="text-sm text-gray-700 truncate" title={hostPlantName}>{hostPlantName}</span>
+                        <Badge variant="secondary" className="text-xs mt-1">
+                          {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
 
@@ -195,12 +208,8 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
                   <div className="text-sm text-gray-600 space-y-2">
                     <div className="flex items-center flex-wrap gap-x-2">
                       <span className="font-semibold">{userName}</span>
-                      <span>|</span>
+                      <span>&nbsp;|&nbsp;</span>
                       <span>{observationDate}</span>
-                      <span>|</span>
-                      <Badge variant="secondary" className="text-xs">
-                        {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
-                      </Badge>
                     </div>
                     <div>
                       <span>{obs.location || 'Unknown location'}</span>
