@@ -90,7 +90,8 @@ Deno.serve(async (req) => {
           } else if (item.common_name?.toLowerCase().includes(q)) {
             display_name = item.scientific_name || item.common_name;
             taxonomic_level = 'common_name';
-          } else {
+          }
+          else {
             display_name = item.scientific_name || item.genus || 'Unknown';
             taxonomic_level = 'unknown';
           }
@@ -179,9 +180,10 @@ Deno.serve(async (req) => {
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
-        // Get optional userId filter
         const userId = url.searchParams.get('userId');
+        const limit = parseInt(url.searchParams.get('limit') || '50', 10);
 
+        // Query observations first
         let query = supabase
           .from('observations')
           .select(`
@@ -189,7 +191,8 @@ Deno.serve(async (req) => {
             lepidoptera:lepidoptera_taxonomy(scientific_name, common_name, family),
             plant:plant_taxonomy(scientific_name, common_name, family)
           `)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(limit);
 
         if (userId) {
           query = query.eq('user_id', userId);
@@ -199,35 +202,67 @@ Deno.serve(async (req) => {
 
         if (error) {
           console.error('Fetch observations error:', error);
+          throw error;
+        }
+
+        if (!observations || observations.length === 0) {
           return new Response(
-            JSON.stringify({ success: false, error: error.message }),
-            { status: 500, headers }
+            JSON.stringify({ success: true, data: [] }),
+            { status: 200, headers }
           );
         }
 
         // Fetch user profiles separately to avoid join issues
-        const userIds = [...new Set(observations?.map(o => o.user_id).filter(Boolean))];
-        let profiles = {};
+        const userIds = [...new Set(observations.map(o => o.user_id).filter(Boolean))];
+        const profilesMap = new Map();
         
         if (userIds.length > 0) {
-          const { data: profileData } = await supabase
+          const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('id, name, username, avatar_url')
             .in('id', userIds);
-          
-          if (profileData) {
-            profiles = Object.fromEntries(profileData.map(p => [p.id, p]));
+
+          if (profileError) {
+            console.warn('Could not fetch profiles:', profileError.message);
+          } else if (profileData) {
+            for (const p of profileData) {
+              profilesMap.set(p.id, p);
+            }
           }
         }
 
-        // Attach user profiles to observations
-        const enrichedObservations = observations?.map(obs => ({
-          ...obs,
-          user: profiles[obs.user_id] || null
-        }));
+        // Fetch images for all observations
+        const obsIds = observations.map(o => o.id);
+        let imagesMap = new Map();
+        if (obsIds.length > 0) {
+          const { data: imagesData, error: imagesError } = await supabase
+            .from('observation_images')
+            .select('observation_id, image_url, image_type')
+            .in('observation_id', obsIds);
+          if (!imagesError && imagesData) {
+            for (const img of imagesData) {
+              if (!imagesMap.has(img.observation_id)) imagesMap.set(img.observation_id, []);
+              imagesMap.get(img.observation_id).push(img);
+            }
+          }
+        }
+
+        // Attach user profiles and image URLs to observations
+        const enrichedObservations = observations.map(obs => {
+          const images = imagesMap.get(obs.id) || [];
+          const lepImg = images.find(i => i.image_type === 'lepidoptera');
+          const plantImg = images.find(i => i.image_type === 'plant');
+          return {
+            ...obs,
+            user: profilesMap.get(obs.user_id) || null,
+            lepidoptera_image_url: lepImg ? lepImg.image_url : null,
+            plant_image_url: plantImg ? plantImg.image_url : null,
+            image_url: lepImg ? lepImg.image_url : (plantImg ? plantImg.image_url : null)
+          };
+        });
 
         return new Response(
-          JSON.stringify({ success: true, data: enrichedObservations || [] }),
+          JSON.stringify({ success: true, data: enrichedObservations }),
           { status: 200, headers }
         );
       } catch (error: any) {
@@ -242,6 +277,8 @@ Deno.serve(async (req) => {
       try {
         const body = await req.json();
         console.log('Creating observation:', body);
+        console.log('Received lepidopteraImages:', body.lepidopteraImages);
+        console.log('Received hostPlantImages:', body.hostPlantImages);
         
         // Get user from auth header
         const authHeader = req.headers.get('Authorization');
@@ -374,9 +411,6 @@ Deno.serve(async (req) => {
             latitude: body.latitude || 0,
             longitude: body.longitude || 0,
             notes: body.notes,
-            image_url: body.lepidopteraImage || body.hostPlantImage,
-            lepidoptera_image_url: body.lepidopteraImage,
-            plant_image_url: body.hostPlantImage,
             is_public: true,
           })
           .select()
@@ -388,6 +422,78 @@ Deno.serve(async (req) => {
             JSON.stringify({ success: false, error: dbError.message }),
             { status: 500, headers }
           );
+        }
+        
+        // Handle image uploads
+        const uploadImage = async (base64, type) => {
+          try {
+            if (!base64 || !base64.startsWith('data:image')) {
+              console.error(`Invalid base64 image data for ${type}`);
+              return null;
+            }
+            const fileName = `${user.id}/${observation.id}/${type}-${Date.now()}.jpg`;
+            // Deno-compatible base64 decoding
+            const base64Data = base64.split(',')[1];
+            const decodedImage = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('observation-images')
+              .upload(fileName, decodedImage, {
+                contentType: 'image/jpeg',
+                upsert: true,
+              });
+            if (uploadError) {
+              console.error(`Error uploading ${type} image:`, uploadError);
+              return null;
+            }
+            const { data: urlData, error: urlError } = supabase.storage.from('observation-images').getPublicUrl(fileName);
+            if (urlError || !urlData?.publicUrl) {
+              console.error(`Error getting public URL for ${type} image:`, urlError);
+              return null;
+            }
+            return {
+              storage_path: fileName,
+              image_url: urlData.publicUrl,
+            };
+          } catch (err) {
+            console.error(`Exception during ${type} image upload:`, err);
+            return null;
+          }
+        };
+
+        const imageUploadPromises = [];
+        if (body.lepidopteraImages) {
+          for (const base64 of body.lepidopteraImages) {
+            imageUploadPromises.push(uploadImage(base64, 'lepidoptera'));
+          }
+        }
+        if (body.hostPlantImages) {
+          for (const base64 of body.hostPlantImages) {
+            imageUploadPromises.push(uploadImage(base64, 'plant'));
+          }
+        }
+        
+        const uploadedImages = await Promise.all(imageUploadPromises);
+        
+        const imageRecords = uploadedImages
+          .filter(img => img !== null)
+          .map((img, index) => ({
+            observation_id: observation.id,
+            image_url: img.image_url,
+            storage_path: img.storage_path,
+            image_type: index < (body.lepidopteraImages?.length || 0) ? 'lepidoptera' : 'plant',
+          }));
+        
+        if (imageRecords.length > 0) {
+          const { error: imageInsertError, data: imageInsertData } = await supabase
+            .from('observation_images')
+            .insert(imageRecords);
+          if (imageInsertError) {
+            console.error('Error inserting image records:', imageInsertError);
+            console.error('Image records attempted:', JSON.stringify(imageRecords, null, 2));
+            // Optionally handle this error, e.g., by deleting the observation
+          } else {
+            console.log('Successfully inserted image records:', imageInsertData);
+          }
         }
 
         return new Response(
