@@ -160,12 +160,18 @@ class FrontendApiClient {
    */
   async getObservations(): Promise<ApiResponse> {
     try {
-      console.log('Fetching observations from Supabase...');
+      console.log('Fetching observations from Supabase with joins...');
       
-      // Fetch ALL observations regardless of is_public status
       const { data, error } = await supabase
         .from('observations')
-        .select('*');
+        .select(`
+          *,
+          profiles ( name, avatar_url ),
+          lepidoptera_taxonomy ( name, common_name ),
+          plant_taxonomy ( name, common_name )
+        `)
+        .eq('is_public', true)
+        .limit(50); // Add a limit to avoid fetching too much data
 
       if (error) {
         console.error('Supabase query error:', error);
@@ -188,13 +194,29 @@ class FrontendApiClient {
         };
       }
 
-      // Process observations and add placeholder data for missing relations
-      const processedData = data.map((obs: any) => ({
-        ...obs,
-        lepidoptera: obs.lepidoptera_id ? { id: obs.lepidoptera_id, species: 'Unknown' } : null,
-        hostPlant: obs.plant_id ? { id: obs.plant_id, species: 'Unknown' } : null,
-        user: { id: obs.user_id, name: 'Unknown User' },
-      }));
+      // Process observations to shape them like the backend response
+      const processedData = data.map((obs: any) => {
+        const { profiles, lepidoptera_taxonomy, plant_taxonomy, ...rest } = obs;
+
+        const user = profiles
+          ? { id: obs.user_id, name: profiles.name, avatar_url: profiles.avatar_url }
+          : { id: obs.user_id, name: 'Unknown User' };
+
+        const lepidoptera = lepidoptera_taxonomy
+          ? { id: obs.lepidoptera_id, species: { name: lepidoptera_taxonomy.common_name || lepidoptera_taxonomy.name } }
+          : obs.lepidoptera_id ? { id: obs.lepidoptera_id, species: { name: 'Unknown Lepidoptera' } } : null;
+        
+        const hostPlant = plant_taxonomy
+          ? { id: obs.plant_id, species: { name: plant_taxonomy.common_name || plant_taxonomy.name } }
+          : obs.plant_id ? { id: obs.plant_id, species: { name: 'Unknown Host Plant' } } : null;
+        
+        return {
+          ...rest,
+          user,
+          lepidoptera,
+          hostPlant,
+        };
+      });
 
       console.log('Processed observations:', processedData);
       
@@ -243,73 +265,125 @@ class FrontendApiClient {
   }
 
   /**
-   * Fallback method to create observations directly in Supabase
-   * Used when backend edge functions are unavailable
-   * Note: RLS prevents direct inserts to taxonomy tables, so we use placeholder IDs
+   * Uploads a base64 encoded image to Supabase Storage.
+   * @param base64Data The base64 data URL of the image.
+   * @param userId The ID of the user uploading the image.
+   * @returns The public URL of the uploaded image.
    */
-  async createObservation(observationData: any, userId: string): Promise<ApiResponse> {
+  private async uploadBase64Image(base64Data: string, userId: string): Promise<string> {
     try {
-      console.log('Creating observation in Supabase (fallback)...');
-      
-      // Use placeholder UUIDs for now since taxonomy tables have RLS enabled
-      // These can be updated later via backend when taxonomy system is ready
-      const PLACEHOLDER_LEPIDOPTERA_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
-      const PLACEHOLDER_PLANT_ID = 'f47ac10b-58cc-4372-a567-0e02b2c3d480';
+      const response = await fetch(base64Data);
+      const blob = await response.blob();
+      const fileExt = blob.type.split('/')[1];
+      const filePath = `${userId}/${Date.now()}.${fileExt}`;
 
-      console.log('Using placeholder taxonomy IDs due to RLS restrictions');
-
-      // Create the observation with placeholder foreign keys
-      const { data, error } = await supabase
-        .from('observations')
-        .insert({
-          user_id: userId,
-          lepidoptera_id: PLACEHOLDER_LEPIDOPTERA_ID,
-          plant_id: PLACEHOLDER_PLANT_ID,
-          location: observationData.location || 'Unknown location',
-          latitude: observationData.latitude || 0,
-          longitude: observationData.longitude || 0,
-          observation_date: observationData.date || new Date().toISOString().split('T')[0],
-          notes: observationData.notes || '',
-          is_public: true,
-        })
-        .select()
-        .single();
-      // Send images separately to observation_images table (handled by backend)
+      const { data, error } = await supabase.storage
+        .from('observation_images')
+        .upload(filePath, blob);
 
       if (error) {
-        console.error('❌ Supabase observation insert error:', error);
-        // If placeholder IDs don't exist, it's an RLS issue on observations table
-        if (error.message.includes('violates foreign key constraint')) {
-          return {
-            success: false,
-            error: 'Database setup issue: Placeholder taxonomy records missing. Please contact admin.',
-          };
-        }
-        if (error.message.includes('row-level security')) {
-          return {
-            success: false,
-            error: 'Permission denied: RLS policy blocks inserts. Please sign in again.',
-          };
-        }
-        return {
-          success: false,
-          error: error.message,
-        };
+        throw new Error(`Storage upload error: ${error.message}`);
       }
 
-      console.log('✓ Observation created:', data);
+       const { data: urlData } = supabase.storage
+        .from('observation_images')
+        .getPublicUrl(data.path);
+
+      if (!urlData) {
+        throw new Error('Could not get public URL for uploaded file.');
+      }
       
+      return urlData.publicUrl;
+    } catch (e) {
+      console.error("Image upload failed:", e);
+      throw e;
+    }
+  }
+
+  /**
+   * Fallback method to create observations directly in Supabase
+   * Used when backend edge functions are unavailable
+   */
+  async createObservation(observationData: any, userId: string): Promise<ApiResponse> {
+    // 1. Insert the core observation data
+    const { data: obsData, error: obsError } = await supabase
+      .from('observations')
+      .insert({
+        user_id: userId,
+        location: observationData.location || 'Unknown location',
+        latitude: observationData.latitude || 0,
+        longitude: observationData.longitude || 0,
+        observation_date: observationData.date || new Date().toISOString().split('T')[0],
+        notes: observationData.notes || '',
+        is_public: true,
+        // Using placeholders for now as per original logic
+        lepidoptera_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
+        plant_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d480',
+      })
+      .select()
+      .single();
+
+    if (obsError) {
+      console.error('❌ Supabase observation insert error:', obsError);
+      return { success: false, error: obsError.message };
+    }
+
+    const observationId = obsData.id;
+    console.log('✓ Observation created with ID:', observationId);
+
+    // 2. Upload images and collect their metadata
+    try {
+      const imageUploadPromises = [];
+
+      // Lepidoptera images
+      for (const lepImage of observationData.lepidopteraImages || []) {
+        imageUploadPromises.push(
+          this.uploadBase64Image(lepImage, userId).then(url => ({
+            observation_id: observationId,
+            image_url: url,
+            image_type: 'lepidoptera',
+          }))
+        );
+      }
+
+      // Host plant images
+      for (const plantImage of observationData.hostPlantImages || []) {
+        imageUploadPromises.push(
+          this.uploadBase64Image(plantImage, userId).then(url => ({
+            observation_id: observationId,
+            image_url: url,
+            image_type: 'plant',
+          }))
+        );
+      }
+
+      const imageRecords = await Promise.all(imageUploadPromises);
+
+      if (imageRecords.length > 0) {
+        // 3. Insert image metadata into the observation_images table
+        const { error: imgError } = await supabase
+          .from('observation_images')
+          .insert(imageRecords);
+
+        if (imgError) {
+          console.error('❌ Supabase image insert error:', imgError);
+          // Optional: Attempt to delete the observation if image upload fails
+          await supabase.from('observations').delete().eq('id', observationId);
+          return { success: false, error: `Failed to save images: ${imgError.message}` };
+        }
+        console.log('✓ Successfully inserted ${imageRecords.length} image records.');
+      }
+
       return {
         success: true,
-        data: data || {},
-        message: 'Observation created successfully',
+        data: obsData,
+        message: 'Observation created successfully with images.',
       };
     } catch (error: any) {
-      console.error('❌ Exception in createObservation:', error);
-      return {
-        success: false,
-        error: error.message || 'Failed to create observation',
-      };
+      console.error('❌ Exception during image processing:', error);
+       // Optional: Attempt to delete the observation if image upload fails
+       await supabase.from('observations').delete().eq('id', observationId);
+      return { success: false, error: error.message || 'A failure occurred during image processing.' };
     }
   }
 

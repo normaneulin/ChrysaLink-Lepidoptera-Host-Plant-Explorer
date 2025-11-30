@@ -37,7 +37,7 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
     setIsLoading(true);
     try {
       // Try backend API first, fallback to direct Supabase query
-      let response = await apiClient.get('/observations?limit=20', accessToken || undefined);
+      let response = await apiClient.get('/observations', accessToken || undefined);
 
       // If backend fails, use fallback Supabase query
       if (!response.success) {
@@ -130,43 +130,86 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {observations.map((obs) => (
-            <Card key={obs.id} className="cursor-pointer" onClick={() => openDetails(obs)}>
-              <CardContent>
-                <div className="flex gap-4">
-                  <div className="w-28">
-                    {obs.image_url ? (
-                      <img src={obs.image_url} alt="observation" className="w-full h-24 object-cover rounded" />
-                    ) : (
-                      <div className="w-full h-24 bg-gray-200 rounded flex items-center justify-center">No image</div>
-                    )}
+        <div className="space-y-6">
+          {observations.map((obs) => {
+            // Data accessors aligned with ExplorePage.tsx and the backend response
+            const lepidopteraImage = obs.lepidoptera_image_url || obs.image_url;
+            const plantImage = obs.plant_image_url;
+            
+            const lepidopteraName = obs.lepidoptera?.common_name || obs.lepidoptera?.scientific_name || 'Lepidoptera';
+            const hostPlantName = obs.plant?.common_name || obs.plant?.scientific_name || 'Host Plant';
+
+            const userName = obs.user?.name || obs.user?.username || 'User' + (obs.user_id?.substring(0, 8) || '');
+            const observationDate = new Date(obs.observation_date || obs.created_at).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            });
+            const createdDate = new Date(obs.created_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            });
+
+            return (
+              <div 
+                key={obs.id} 
+                className="bg-white rounded-lg overflow-hidden shadow-sm border border-gray-200 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => openDetails(obs)}
+              >
+                <div className="p-4">
+                  {/* Header */}
+                  <div className="text-sm text-gray-600 mb-4">
+                    <span>{createdDate}</span>
+                    <span className="font-semibold text-gray-800"> {userName} </span>
+                    added an observation
                   </div>
 
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback>{obs.user?.name?.[0] || 'U'}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{obs.user?.name || 'Unknown'}</p>
-                          <p className="text-xs text-gray-500">{obs.created_at ? new Date(obs.created_at).toLocaleString() : 'N/A'}</p>
-                        </div>
+                  {/* Image Section */}
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    {/* Lepidoptera */}
+                    <div>
+                      <div className="w-full aspect-square relative rounded-md overflow-hidden bg-gray-100">
+                        {lepidopteraImage ? (
+                          <img src={lepidopteraImage} alt={lepidopteraName} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+                        )}
                       </div>
+                      <p className="mt-2 text-sm font-semibold text-gray-800 italic truncate" title={lepidopteraName}>{lepidopteraName}</p>
                     </div>
+                    {/* Host Plant */}
+                    <div>
+                       <div className="w-full aspect-square relative rounded-md overflow-hidden bg-gray-100">
+                        {plantImage ? (
+                          <img src={plantImage} alt={hostPlantName} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-400">No Image</div>
+                        )}
+                      </div>
+                      <p className="mt-2 text-sm font-semibold text-gray-800 truncate" title={hostPlantName}>{hostPlantName}</p>
+                    </div>
+                  </div>
 
-                    <p className="text-sm font-medium mt-2">📍 {obs.location || 'Unknown location'}</p>
-                    <p className="text-sm text-gray-700 mt-2 line-clamp-2">{obs.notes || 'No notes'}</p>
-
-                    <div className="flex gap-2 mt-3">
-                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleStartSuggest(obs.id); }}>View Details</Button>
+                  {/* Footer */}
+                  <div className="text-sm text-gray-600 space-y-2">
+                    <div className="flex items-center flex-wrap gap-x-2">
+                      <span className="font-semibold">{userName}</span>
+                      <span>|</span>
+                      <span>{observationDate}</span>
+                      <span>|</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
+                      </Badge>
+                    </div>
+                    <div>
+                      <span>{obs.location || 'Unknown location'}</span>
                     </div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
