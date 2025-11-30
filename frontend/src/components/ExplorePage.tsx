@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
+import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { Badge } from './ui/badge';
 import { Search, MapPin, Calendar, MessageSquare, ChevronDown } from 'lucide-react';
 import {
@@ -168,100 +169,93 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
         const diffDays = Math.floor(diffHours / 24);
         const timeAgo = diffDays > 0 ? `${diffDays}d` : diffHours > 0 ? `${diffHours}h` : 'Just now';
         
+        // Current identifications
+        const lepCurrentId = obs.lepidoptera_current_identification;
+        const plantCurrentId = obs.plant_current_identification;
+        
         return (
           <div
             key={obs.id}
             className="bg-white rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all hover:-translate-y-1 cursor-pointer flex flex-col h-full"
             onClick={() => setSelectedObservation(obs)}
           >
-            {/* Dual Image Section - Fixed Height Container */}
-            <div className="w-full aspect-[2/1] flex-shrink-0 bg-black">
-              <div className="grid grid-cols-2 h-full w-full">
-                {/* Lepidoptera Image */}
-                <div className="relative overflow-hidden bg-gray-900">
-                  {lepidopteraImage ? (
-                    <img src={lepidopteraImage} alt="Lepidoptera" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-800 text-gray-400 text-sm">
-                      No Image
-                    </div>
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 h-[60px] bg-gradient-to-t from-black/70 to-transparent" />
-                  <div className="absolute bottom-2 left-2 right-2 text-white text-[11px] font-semibold uppercase tracking-wide flex items-center gap-1 z-10">
-                    <MessageSquare className="h-3.5 w-3.5" />
-                    Lepidoptera
-                  </div>
-                </div>
-                
-                {/* Host Plant Image */}
-                <div className="relative overflow-hidden bg-gray-900">
-                  {plantImage ? (
-                    <img src={plantImage} alt="Host Plant" className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-700 text-gray-400 text-sm">
-                      No Image
-                    </div>
-                  )}
-                  <div className="absolute inset-x-0 bottom-0 h-[60px] bg-gradient-to-t from-black/70 to-transparent" />
-                  <div className="absolute bottom-2 left-2 right-2 text-white text-[11px] font-semibold uppercase tracking-wide flex items-center gap-1 z-10">
-                    <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z"/></svg>
-                    Host Plant
-                  </div>
-                </div>
+            {/* Dual Image Section - Fixed Square Frames */}
+            <div className="w-full flex flex-row">
+              {/* Lepidoptera Image */}
+              <div className="w-24 h-24 relative overflow-hidden bg-gray-900 flex items-center justify-center">
+                {lepidopteraImage ? (
+                  <img src={lepidopteraImage} alt="Lepidoptera" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-800 text-gray-400 text-sm">No Image</div>
+                )}
+              </div>
+              {/* Host Plant Image */}
+              <div className="w-24 h-24 relative overflow-hidden bg-gray-900 flex items-center justify-center ml-2">
+                {plantImage ? (
+                  <img src={plantImage} alt="Host Plant" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-700 text-gray-400 text-sm">No Image</div>
+                )}
               </div>
             </div>
             
             {/* Caption Section */}
             <div className="p-4 flex flex-col gap-3">
-              {/* User Row */}
-              <div className="flex items-center gap-2">
-                {userAvatar ? (
-                  <img src={userAvatar} alt={userName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex-shrink-0" />
-                )}
-                <span className="text-[13px] text-gray-600 font-medium hover:text-gray-900">
-                  {userName}
-                </span>
+              {/* User Row - Avatar, Username, Observation Count */}
+              <div className="flex items-center p-2">
+                <Avatar className="h-12 w-12 border-2 border-white shadow-sm mr-3">
+                  <AvatarImage src={obs.user?.avatar || obs.user?.avatar_url} />
+                  <AvatarFallback>{obs.user?.username?.[0] || obs.user?.name?.[0] || 'U'}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col ml-2">
+                  <span className="font-bold text-base text-gray-900">{obs.user?.username || obs.user?.name || obs.user?.fullName || 'Unknown User'}</span>
+                  <span className="text-sm text-gray-500 font-medium">
+                    {obs.user?.observationCount || 0} observations
+                  </span>
+                </div>
               </div>
               
               {/* Species Section */}
               <div className="flex flex-col gap-2">
                 {/* Lepidoptera */}
                 <div className="flex flex-col gap-0.5">
-                  <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1">
-                    <MessageSquare className="h-3 w-3" />
+                  <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
                     Lepidoptera
                   </div>
                   <div className="font-semibold text-[14px] text-gray-800 hover:text-amber-600">
-                    {lepidopteraCommonName || lepidopteraScientificName}
+                    {lepCurrentId ? lepCurrentId : 'Unknown'}
                   </div>
+                  <Badge variant="secondary" className="text-xs mt-1">
+                    {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
+                  </Badge>
+                  {/*}
                   <div className="text-[12px] text-gray-500 italic">
                     {lepidopteraScientificName}
                   </div>
+                  */} 
                 </div>
                 
                 {/* Host Plant */}
                 <div className="flex flex-col gap-0.5">
-                  <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold flex items-center gap-1">
-                    <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z"/></svg>
+                  <div className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">
                     Host Plant
                   </div>
                   <div className="font-semibold text-[14px] text-gray-800 hover:text-green-600">
-                    {plantCommonName || plantScientificName}
+                    {plantCurrentId ? plantCurrentId : 'Unknown'}
                   </div>
+                  <Badge variant="secondary" className="text-xs mt-1">
+                    {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
+                  </Badge>
+                  {/*
                   <div className="text-[12px] text-gray-500 italic">
                     {plantScientificName}
                   </div>
+                  */}
                 </div>
               </div>
               
               {/* Meta Section */}
               <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
-                <span className="inline-block px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-700 w-fit">
-                  Needs ID
-                </span>
-                
                 <div className="flex items-center gap-3 text-[12px] text-gray-500">
                   <span className="flex items-center gap-1">
                     <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,3.5A1.5,1.5 0 0,1 13.5,5A1.5,1.5 0 0,1 12,6.5A1.5,1.5 0 0,1 10.5,5A1.5,1.5 0 0,1 12,3.5M9.5,8H14.5V9.5H9.5M9.5,11.5H14.5V13H9.5M9.5,15H14.5V16.5H9.5"/></svg>
@@ -292,16 +286,16 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
   const ListView = () => (
     <div className="bg-white rounded-lg overflow-hidden shadow-sm">
       <table className="w-full border-collapse">
-        <thead className="bg-gray-50 border-b-2 border-gray-200">
+        <thead className="bg-gray-50 border-b-2 border-gray-200 text-left">
           <tr>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide w-20">Lepidoptera Media</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[180px]">Lepidoptera Name</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide w-20">Host Plant Media</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[180px]">Host Plant Name</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[120px]">User</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[140px] cursor-pointer hover:bg-gray-100">Observed</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[200px]">Place</th>
-            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[140px] cursor-pointer hover:bg-gray-100">Added</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide w-20" style={{textAlign: 'left'}}>Lepidoptera Media</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[180px]" style={{textAlign: 'left'}}>Lepidoptera Name</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide w-20" style={{textAlign: 'left'}}>Host Plant Media</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[180px]" style={{textAlign: 'left'}}>Host Plant Name</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[120px]" style={{textAlign: 'left'}}>User</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[140px] cursor-pointer hover:bg-gray-100" style={{textAlign: 'left'}}>Observed</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[200px]" style={{textAlign: 'left'}}>Place</th>
+            <th className="px-4 py-3 text-left text-[10px] font-semibold text-gray-600 uppercase tracking-wide min-w-[140px] cursor-pointer hover:bg-gray-100" style={{textAlign: 'left'}}>Added</th>
           </tr>
         </thead>
         <tbody>
@@ -342,16 +336,12 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
               >
                 {/* Lepidoptera Media Column */}
                 <td className="px-3 py-2">
-                  <div className="w-16 h-16 relative rounded overflow-hidden flex-shrink-0">
+                  <div className="w-24 h-24 relative rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
                     {lepidopteraImage ? (
                       <img src={lepidopteraImage} alt="Lepidoptera" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-400">No Image</div>
                     )}
-                    <div className="absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-black/60 to-transparent" />
-                    <div className="absolute bottom-0 left-0.5 text-white text-[8px] font-semibold uppercase tracking-wide flex items-center gap-0.5">
-                      <MessageSquare className="h-2 w-2" />
-                    </div>
                   </div>
                 </td>
 
@@ -359,36 +349,23 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
                 <td className="px-3 py-2">
                   <div className="flex flex-col gap-0.5">
                     <a href="#" className="text-[12px] font-semibold text-gray-800 hover:text-amber-600 leading-tight">
-                      {lepidopteraCommonName || lepidopteraScientificName}
+                      {obs.lepidoptera_current_identification ? obs.lepidoptera_current_identification : 'Unknown'}
                     </a>
-                    <span className="text-[11px] text-gray-500 italic leading-tight">{lepidopteraScientificName}</span>
-                    <div className="flex gap-2 text-[10px] text-gray-500 mt-0.5">
-                      <span className="flex items-center gap-1">
-                        <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,3.5A1.5,1.5 0 0,1 13.5,5A1.5,1.5 0 0,1 12,6.5A1.5,1.5 0 0,1 10.5,5A1.5,1.5 0 0,1 12,3.5M9.5,8H14.5V9.5H9.5M9.5,11.5H14.5V13H9.5M9.5,15H14.5V16.5H9.5"/></svg>
-                        {obs.identifications?.length || 0}
-                      </span>
-                      {(obs.comments?.length || 0) > 0 && (
-                        <span className="flex items-center gap-1">
-                          <MessageSquare className="h-2.5 w-2.5" />
-                          {obs.comments?.length}
-                        </span>
-                      )}
-                    </div>
+                    {/*<span className="text-[11px] text-gray-500 italic leading-tight">{lepidopteraScientificName}</span>*/}
+                    <Badge variant="secondary" className="text-xs mt-1">
+                      {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
+                    </Badge>
                   </div>
                 </td>
 
                 {/* Host Plant Media Column */}
                 <td className="px-3 py-2">
-                  <div className="w-16 h-16 relative rounded overflow-hidden flex-shrink-0">
+                  <div className="w-24 h-24 relative rounded overflow-hidden flex-shrink-0 flex items-center justify-center">
                     {plantImage ? (
                       <img src={plantImage} alt="Host Plant" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-gray-200 flex items-center justify-center text-[9px] text-gray-400">No Image</div>
                     )}
-                    <div className="absolute inset-x-0 bottom-0 h-5 bg-gradient-to-t from-black/60 to-transparent" />
-                    <div className="absolute bottom-0 left-0.5 text-white text-[8px] font-semibold uppercase tracking-wide flex items-center gap-0.5">
-                      <svg className="h-2 w-2" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10 5.9,16.17 3.82,21.34L5.71,22L6.66,19.7C7.14,19.87 7.64,20 8,20C19,20 22,3 22,3C21,5 14,5.25 9,6.25C4,7.25 2,11.5 2,13.5C2,15.5 3.75,17.25 3.75,17.25C7,8 17,8 17,8Z"/></svg>
-                    </div>
                   </div>
                 </td>
 
@@ -396,12 +373,12 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
                 <td className="px-3 py-2">
                   <div className="flex flex-col gap-0.5">
                     <a href="#" className="text-[12px] font-semibold text-gray-800 hover:text-green-600 leading-tight">
-                      {plantCommonName || plantScientificName}
+                      {obs.plant_current_identification ? obs.plant_current_identification : 'Unknown'}
                     </a>
-                    <span className="text-[11px] text-gray-500 italic leading-tight">{plantScientificName}</span>
-                    <span className="inline-block px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-wide bg-amber-50 text-amber-700 w-fit mt-0.5">
-                      Needs ID
-                    </span>
+                    {/*<span className="text-[11px] text-gray-500 italic leading-tight">{plantScientificName}</span>*/}
+                    <Badge variant="secondary" className="text-xs mt-1">
+                      {obs.quality_grade ? obs.quality_grade.replace(/_/g, ' ') : 'Needs ID'}
+                    </Badge>
                   </div>
                 </td>
 

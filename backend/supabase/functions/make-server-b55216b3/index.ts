@@ -412,6 +412,8 @@ Deno.serve(async (req) => {
             longitude: body.longitude || 0,
             notes: body.notes,
             is_public: true,
+            lepidoptera_current_identification: body.lepidoptera_current_identification,
+            plant_current_identification: body.plant_current_identification,
           })
           .select()
           .single();

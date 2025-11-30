@@ -21,8 +21,11 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   const [lepidopteraImages, setLepidopteraImages] = useState<string[]>([]);
   const [hostPlantImages, setHostPlantImages] = useState<string[]>([]);
   const [lepidopteraSpecies, setLepidopteraSpecies] = useState('');
+  const [lepidopteraTaxonomicLevel, setLepidopteraTaxonomicLevel] = useState('');
   const [hostPlantSpecies, setHostPlantSpecies] = useState('');
+  const [hostPlantTaxonomicLevel, setHostPlantTaxonomicLevel] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [time, setTime] = useState('08:00'); // Default to 8am
   const [location, setLocation] = useState('');
   const [latitude, setLatitude] = useState('');
   const [longitude, setLongitude] = useState('');
@@ -78,19 +81,18 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   };
 
   const handleImageUpload = (type: 'lepidoptera' | 'hostPlant') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        if (type === 'lepidoptera') {
-          setLepidopteraImages(prev => [...prev, base64]);
-        } else {
-          setHostPlantImages(prev => [...prev, base64]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      if (type === 'lepidoptera') {
+        setLepidopteraImages([base64]);
+      } else {
+        setHostPlantImages([base64]);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const getCurrentLocation = () => {
@@ -116,6 +118,13 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
     setIsLoading(true);
 
     try {
+      // Combine date and time into ISO string
+      const observationDateTime = date && time ? `${date}T${time}` : date;
+
+      // Fallback: use search bar value if species state is empty
+      const lepidopteraIdentification = lepidopteraSpecies || lepidopteraSearch;
+      const plantIdentification = hostPlantSpecies || hostPlantSearch;
+
       // Try backend API first
       let response = await apiClient.post(
         '/observations',
@@ -124,11 +133,13 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
           lepidopteraSpecies,
           hostPlantImages,
           hostPlantSpecies,
-          date,
+          date: observationDateTime,
           location,
           latitude: latitude ? parseFloat(latitude) : null,
           longitude: longitude ? parseFloat(longitude) : null,
-          notes
+          notes,
+          lepidoptera_current_identification: lepidopteraIdentification,
+          plant_current_identification: plantIdentification
         },
         accessToken
       );
@@ -136,13 +147,13 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       // If backend fails, use fallback Supabase method
       if (!response.success) {
         console.log('Backend unavailable, using fallback Supabase query...');
-        
+
         // Get current user ID from Supabase auth
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 
           `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
         const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
         const supabase = createClient(supabaseUrl, supabaseAnonKey);
-        
+
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.id) {
           throw new Error('User not authenticated');
@@ -154,11 +165,13 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
             lepidopteraSpecies,
             hostPlantImages,
             hostPlantSpecies,
-            date,
+            date: observationDateTime,
             location,
             latitude: latitude ? parseFloat(latitude) : null,
             longitude: longitude ? parseFloat(longitude) : null,
-            notes
+            notes,
+            lepidoptera_current_identification: lepidopteraIdentification,
+            plant_current_identification: plantIdentification
           },
           user.id
         );
@@ -171,7 +184,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       toast.success('Observation uploaded successfully!');
       onSuccess();
       onClose();
-      
+
       // Reset form
       setLepidopteraImages([]);
       setHostPlantImages([]);
@@ -181,6 +194,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       setLatitude('');
       setLongitude('');
       setNotes('');
+      setTime('08:00');
     } catch (error: any) {
       console.error('Upload error:', error);
       toast.error(error.message || 'Failed to upload observation');
@@ -223,20 +237,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           {lepidopteraImages.map((img, idx) => (
                             <img key={idx} src={img} alt={`Lepidoptera ${idx+1}`} className="w-12 h-12 object-cover rounded border" />
                           ))}
-                          {lepidopteraImages.length < 10 && (
-                            <label className="flex flex-col items-center justify-center w-12 h-12 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ml-2">
-                              <Upload className="h-5 w-5 text-gray-400 mb-1" />
-                              <span className="text-xs text-gray-500">Add</span>
-                              <input
-                                id="lepidoptera-image-add"
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                className="hidden"
-                                onChange={handleImageUpload('lepidoptera')}
-                              />
-                            </label>
-                          )}
+                          {/* Multiple photo add disabled */}
                         </div>
                         <button
                           type="button"
@@ -258,7 +259,6 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           id="lepidoptera-image"
                           type="file"
                           accept="image/*"
-                          multiple
                           className="hidden"
                           onChange={handleImageUpload('lepidoptera')}
                         />
@@ -289,7 +289,13 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           type="button"
                           className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
                           onClick={() => {
-                            setLepidopteraSpecies(species.display_name || species.scientific_name);
+                            if (species.taxonomic_level === 'family') {
+                              setLepidopteraSpecies(species.display_name || species.scientific_name);
+                              setLepidopteraTaxonomicLevel('family');
+                            } else {
+                              setLepidopteraSpecies(species.display_name || species.scientific_name);
+                              setLepidopteraTaxonomicLevel(species.taxonomic_level || '');
+                            }
                             setLepidopteraSearch(species.display_name || species.scientific_name);
                             setShowLepidopteraPopover(false);
                           }}
@@ -331,20 +337,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           {hostPlantImages.map((img, idx) => (
                             <img key={idx} src={img} alt={`Host Plant ${idx+1}`} className="w-12 h-12 object-cover rounded border" />
                           ))}
-                          {hostPlantImages.length < 10 && (
-                            <label className="flex flex-col items-center justify-center w-12 h-12 border-2 border-dashed rounded-lg cursor-pointer hover:bg-gray-50 ml-2">
-                              <Upload className="h-5 w-5 text-gray-400 mb-1" />
-                              <span className="text-xs text-gray-500">Add</span>
-                              <input
-                                id="hostplant-image-add"
-                                type="file"
-                                accept="image/*"
-                                multiple
-                                className="hidden"
-                                onChange={handleImageUpload('hostPlant')}
-                              />
-                            </label>
-                          )}
+                          {/* Multiple photo add disabled */}
                         </div>
                         <button
                           type="button"
@@ -366,7 +359,6 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           id="hostplant-image"
                           type="file"
                           accept="image/*"
-                          multiple
                           className="hidden"
                           onChange={handleImageUpload('hostPlant')}
                         />
@@ -397,7 +389,13 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           type="button"
                           className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
                           onClick={() => {
-                            setHostPlantSpecies(species.display_name || species.scientific_name);
+                            if (species.taxonomic_level === 'family') {
+                              setHostPlantSpecies(species.display_name || species.scientific_name);
+                              setHostPlantTaxonomicLevel('family');
+                            } else {
+                              setHostPlantSpecies(species.display_name || species.scientific_name);
+                              setHostPlantTaxonomicLevel(species.taxonomic_level || '');
+                            }
                             setHostPlantSearch(species.display_name || species.scientific_name);
                             setShowHostPlantPopover(false);
                           }}
@@ -428,16 +426,31 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
           {/* Common Fields */}
           <div className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="date">Date</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                />
+              <div className="flex gap-2 items-end">
+                <div>
+                  <Label htmlFor="date">Date</Label>
+                  <Input
+                    id="date"
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="time">Time</Label>
+                  <Input
+                    id="time"
+                    type="time"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="location">Location Name</Label>
                 <Input
