@@ -55,7 +55,19 @@ export function ObservationDetailModal({
       user: { name: c.userName, avatar: c.userAvatar },
       content: c.text
     }));
-  };
+    const identifications = (localObservation.identifications || []).map((i: any) => ({
+      type: 'identification',
+      subtype: i.identificationType || (i.species === localObservation?.lepidoptera?.species ? 'lepidoptera' : 'hostPlant'),
+      id: i.id,
+      date: new Date(i.createdAt || i.created_at),
+      user: { name: i.userName, avatar: i.userAvatar },
+      species: i.species,
+      scientificName: i.scientificName,
+      verified: i.verified,
+      thumb: i.taxonThumb
+    }));
+    return [...comments, ...identifications].sort((a, b) => a.date.getTime() - b.date.getTime());
+  }, [localObservation]);
 
   const handleAddComment = async () => {
     if (!comment.trim() || !accessToken) return;
