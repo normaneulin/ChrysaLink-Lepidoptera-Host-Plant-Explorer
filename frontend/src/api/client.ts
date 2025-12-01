@@ -126,33 +126,6 @@ class FrontendApiClient {
    * Examples: "blue" matches "Blue Morpho", "Blueberry"
    * Result Limit: Max 20 to prevent UI overload
    */
-  async searchSpecies(query: string, type: 'lepidoptera' | 'plant'): Promise<ApiResponse> {
-    try {
-      const table = type === 'lepidoptera' ? 'lepidoptera_taxonomy' : 'plant_taxonomy';
-      const { data, error } = await supabase
-        .from(table)
-        .select('*')
-        .ilike('common_name', `%${query}%`)
-        .limit(20);
-
-      if (error) {
-        return {
-          success: false,
-          error: error.message,
-        };
-      }
-
-      return {
-        success: true,
-        data: data || [],
-      };
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || 'Failed to search species',
-      };
-    }
-  }
 
   /**
    * Fallback method to fetch observations directly from Supabase
