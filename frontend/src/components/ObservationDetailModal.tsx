@@ -148,10 +148,14 @@ export function ObservationDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0"
+        aria-labelledby="observation-dialog-title"
+        aria-describedby="observation-dialog-description"
+      >
         <DialogHeader className="sr-only">
-          <DialogTitle>Observation Details</DialogTitle>
-          <DialogDescription>
+          <DialogTitle id="observation-dialog-title">Observation Details</DialogTitle>
+          <DialogDescription id="observation-dialog-description">
             Detailed view of the observation including images, species identification, and user activity.
           </DialogDescription>
         </DialogHeader>
