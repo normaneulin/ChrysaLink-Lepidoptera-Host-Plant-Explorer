@@ -624,26 +624,29 @@ Deno.serve(async (req) => {
           );
         }
         const body = await req.json();
-        // Validate required fields
-        if (!body.lepidoptera_id || !body.plant_id) {
+        // Validate required fields: require at least one species id (lepidoptera_id OR plant_id)
+        if (!body.lepidoptera_id && !body.plant_id) {
           return new Response(
-            JSON.stringify({ success: false, error: 'Missing lepidoptera_id or plant_id' }),
+            JSON.stringify({ success: false, error: 'At least one of lepidoptera_id or plant_id is required' }),
             { status: 400, headers }
           );
         }
-        // Insert observation
+
+        // Insert observation (include current identification text when provided)
         const { data: obs, error: obsError } = await supabase
           .from('observations')
           .insert({
             user_id: user.id,
-            lepidoptera_id: body.lepidoptera_id,
-            plant_id: body.plant_id,
+            lepidoptera_id: body.lepidoptera_id || null,
+            plant_id: body.plant_id || null,
             location: body.location || '',
             latitude: body.latitude || null,
             longitude: body.longitude || null,
             observation_date: body.date ? body.date.split('T')[0] : new Date().toISOString().split('T')[0],
             notes: body.notes || '',
             is_public: true,
+            lepidoptera_current_identification: body.lepidoptera_current_identification || null,
+            plant_current_identification: body.plant_current_identification || null,
           })
           .select()
           .single();

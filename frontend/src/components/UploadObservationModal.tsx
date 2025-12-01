@@ -135,25 +135,28 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       const plantIdentification = hostPlantSpecies || hostPlantSearch;
 
       // Try backend API first
-      let response = await apiClient.post(
-        '/observations',
-        {
-          lepidopteraImages,
-          lepidopteraSpecies,
-          lepidoptera_id: lepidopteraId,
-          hostPlantImages,
-          hostPlantSpecies,
-          plant_id: hostPlantId,
-          date: observationDateTime,
-          location,
-          latitude: latitude ? parseFloat(latitude) : null,
-          longitude: longitude ? parseFloat(longitude) : null,
-          notes,
-          lepidoptera_current_identification: lepidopteraIdentification,
-          plant_current_identification: plantIdentification
-        },
-        accessToken
-      );
+      const payload: any = {
+        lepidopteraImages,
+        hostPlantImages,
+        lepidopteraSpecies: lepidopteraSpecies || null,
+        hostPlantSpecies: hostPlantSpecies || null,
+        lepidoptera_id: lepidopteraId || null,
+        plant_id: hostPlantId || null,
+        date: observationDateTime,
+        location,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
+        notes,
+      };
+
+      if (lepidopteraIdentification && lepidopteraIdentification.trim().length > 0) {
+        payload.lepidoptera_current_identification = lepidopteraIdentification;
+      }
+      if (plantIdentification && plantIdentification.trim().length > 0) {
+        payload.plant_current_identification = plantIdentification;
+      }
+
+      let response = await apiClient.post('/observations', payload, accessToken);
 
       // If backend fails, use fallback Supabase method
       if (!response.success) {
@@ -170,24 +173,27 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
           throw new Error('User not authenticated');
         }
 
-        response = await apiClient.createObservation(
-          {
-            lepidopteraImages,
-            lepidopteraSpecies,
-            lepidoptera_id: lepidopteraId,
-            hostPlantImages,
-            hostPlantSpecies,
-            plant_id: hostPlantId,
-            date: observationDateTime,
-            location,
-            latitude: latitude ? parseFloat(latitude) : null,
-            longitude: longitude ? parseFloat(longitude) : null,
-            notes,
-            lepidoptera_current_identification: lepidopteraIdentification,
-            plant_current_identification: plantIdentification
-          },
-          user.id
-        );
+        const fallbackPayload: any = {
+          lepidopteraImages,
+          hostPlantImages,
+          lepidopteraSpecies: lepidopteraSpecies || null,
+          hostPlantSpecies: hostPlantSpecies || null,
+          lepidoptera_id: lepidopteraId || null,
+          plant_id: hostPlantId || null,
+          date: observationDateTime,
+          location,
+          latitude: latitude ? parseFloat(latitude) : null,
+          longitude: longitude ? parseFloat(longitude) : null,
+          notes,
+        };
+        if (lepidopteraIdentification && lepidopteraIdentification.trim().length > 0) {
+          fallbackPayload.lepidoptera_current_identification = lepidopteraIdentification;
+        }
+        if (plantIdentification && plantIdentification.trim().length > 0) {
+          fallbackPayload.plant_current_identification = plantIdentification;
+        }
+
+        response = await apiClient.createObservation(fallbackPayload, user.id);
       }
 
       if (!response.success) {
