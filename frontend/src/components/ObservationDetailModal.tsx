@@ -144,7 +144,10 @@ export function ObservationDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0" aria-describedby="observation-detail-description">
+        <div id="observation-detail-description" className="sr-only">
+          Detailed information about the observation, including images, comments, and activity.
+        </div>
         
         {/* Header Title */}
         <div className="p-4 border-b border-gray-100 bg-gray-50/50">
