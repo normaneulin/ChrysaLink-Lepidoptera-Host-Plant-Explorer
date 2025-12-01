@@ -20,17 +20,6 @@ interface ObservationDetailModalProps {
 }
 
 export function ObservationDetailModal({
-    // Fetch latest observation details
-    const fetchObservationDetails = async () => {
-      try {
-        const response = await apiClient.get(`/observations/${observation.id}`, accessToken);
-        if (response.success && response.data) {
-          setLocalObservation(response.data);
-        }
-      } catch (error) {
-        // Optionally handle error
-      }
-    };
   observation,
   isOpen,
   onClose,
@@ -38,6 +27,18 @@ export function ObservationDetailModal({
   currentUserId,
   onUpdate
 }: ObservationDetailModalProps) {
+  // ...existing code...
+  // Fetch latest observation details
+  const fetchObservationDetails = async () => {
+    try {
+      const response = await apiClient.get(`/observations/${observation.id}`, accessToken);
+      if (response.success && response.data) {
+        setLocalObservation(response.data);
+      }
+    } catch (error) {
+      // Optionally handle error
+    }
+  };
   // --- State ---
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
