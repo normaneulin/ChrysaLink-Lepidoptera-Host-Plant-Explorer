@@ -1,8 +1,8 @@
 const { createClient } = require('@supabase/supabase-js');
 
 // Replace with your Supabase project details
-const SUPABASE_URL = 'https://your-project.supabase.co';
-const SUPABASE_SERVICE_ROLE_KEY = 'your-service-role-key';
+const SUPABASE_URL = 'https://vaqxhxcwtwhnewkoaafn.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZhcXhoeGN3dHdobmV3a29hYWZuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzA0OTYyMywiZXhwIjoyMDcyNjI1NjIzfQ.2nO5hED1amSBw8LHMrPLgAyzYz1nWaSQ1O6oAlSfJkE';
 const BUCKET = 'observation-images';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

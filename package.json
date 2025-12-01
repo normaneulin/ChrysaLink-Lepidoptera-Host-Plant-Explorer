@@ -11,5 +11,8 @@
     "plantuml": "^0.0.2",
     "supabase": "^2.62.5",
     "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.86.0"
   }
 }

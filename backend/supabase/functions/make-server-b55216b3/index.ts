@@ -257,10 +257,48 @@ Deno.serve(async (req) => {
 
   // --- Notifications ---
   if (path === '/notifications') {
-    return new Response(
-      JSON.stringify({ success: true, data: [] }),
-      { status: 200, headers }
-    );
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      // Get user from auth header
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized' }),
+          { status: 401, headers }
+        );
+      }
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid token' }),
+          { status: 401, headers }
+        );
+      }
+
+      // Fetch notifications for user
+      const { data: notifications, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true, data: notifications }),
+        { status: 200, headers }
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ success: false, error: error.message }),
+        { status: 500, headers }
+      );
+    }
   }
 
   // --- Observation Comments ---
