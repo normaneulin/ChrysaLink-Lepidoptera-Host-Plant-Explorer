@@ -22,8 +22,10 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   const [hostPlantImages, setHostPlantImages] = useState<string[]>([]);
   const [lepidopteraSpecies, setLepidopteraSpecies] = useState('');
   const [lepidopteraTaxonomicLevel, setLepidopteraTaxonomicLevel] = useState('');
+  const [lepidopteraId, setLepidopteraId] = useState<string>('');
   const [hostPlantSpecies, setHostPlantSpecies] = useState('');
   const [hostPlantTaxonomicLevel, setHostPlantTaxonomicLevel] = useState('');
+  const [hostPlantId, setHostPlantId] = useState<string>('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState('08:00'); // Default to 8am
   const [location, setLocation] = useState('');
@@ -131,8 +133,10 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
         {
           lepidopteraImages,
           lepidopteraSpecies,
+          lepidoptera_id: lepidopteraId,
           hostPlantImages,
           hostPlantSpecies,
+          plant_id: hostPlantId,
           date: observationDateTime,
           location,
           latitude: latitude ? parseFloat(latitude) : null,
@@ -163,8 +167,10 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
           {
             lepidopteraImages,
             lepidopteraSpecies,
+            lepidoptera_id: lepidopteraId,
             hostPlantImages,
             hostPlantSpecies,
+            plant_id: hostPlantId,
             date: observationDateTime,
             location,
             latitude: latitude ? parseFloat(latitude) : null,
@@ -292,6 +298,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           type="button"
                           className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
                           onClick={() => {
+                            setLepidopteraId(species.id || '');
                             if (species.taxonomic_level === 'family') {
                               setLepidopteraSpecies(species.display_name || species.scientific_name);
                               setLepidopteraTaxonomicLevel('family');
@@ -392,6 +399,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           type="button"
                           className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
                           onClick={() => {
+                            setHostPlantId(species.id || '');
                             if (species.taxonomic_level === 'family') {
                               setHostPlantSpecies(species.display_name || species.scientific_name);
                               setHostPlantTaxonomicLevel('family');

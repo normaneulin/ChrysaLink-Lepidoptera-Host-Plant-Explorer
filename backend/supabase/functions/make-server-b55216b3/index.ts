@@ -579,9 +579,97 @@ Deno.serve(async (req) => {
         );
       }
     } else if (req.method === 'POST') {
-       // ... (Keep your existing POST logic exactly as it is) ...
-       // (Copy the POST block from your original file here)
-       // ...
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Unauthorized' }),
+            { status: 401, headers }
+          );
+        }
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Invalid token' }),
+            { status: 401, headers }
+          );
+        }
+        const body = await req.json();
+        // Validate required fields
+        if (!body.lepidoptera_id || !body.plant_id) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Missing lepidoptera_id or plant_id' }),
+            { status: 400, headers }
+          );
+        }
+        // Insert observation
+        const { data: obs, error: obsError } = await supabase
+          .from('observations')
+          .insert({
+            user_id: user.id,
+            lepidoptera_id: body.lepidoptera_id,
+            plant_id: body.plant_id,
+            location: body.location || '',
+            latitude: body.latitude || null,
+            longitude: body.longitude || null,
+            observation_date: body.date ? body.date.split('T')[0] : new Date().toISOString().split('T')[0],
+            notes: body.notes || '',
+            is_public: true,
+          })
+          .select()
+          .single();
+        if (obsError) {
+          return new Response(
+            JSON.stringify({ success: false, error: obsError.message }),
+            { status: 500, headers }
+          );
+        }
+        // Handle image uploads (base64 to storage)
+        const imageRecords = [];
+        async function uploadImage(base64, type) {
+          if (!base64) return null;
+          // Convert base64 to Blob
+          const res = await fetch(base64);
+          const blob = await res.blob();
+          const ext = blob.type.split('/')[1];
+          const filePath = `${user.id}/${obs.id}/${Date.now()}.${ext}`;
+          const { data, error } = await supabase.storage.from('observation-images').upload(filePath, blob);
+          if (error) throw new Error('Image upload error: ' + error.message);
+          const { data: urlData } = supabase.storage.from('observation-images').getPublicUrl(data.path);
+          if (!urlData) throw new Error('Could not get public URL for uploaded file.');
+          imageRecords.push({ observation_id: obs.id, image_url: urlData.publicUrl, image_type: type });
+        }
+        for (const img of body.lepidopteraImages || []) {
+          await uploadImage(img, 'lepidoptera');
+        }
+        for (const img of body.hostPlantImages || []) {
+          await uploadImage(img, 'plant');
+        }
+        if (imageRecords.length > 0) {
+          const { error: imgError } = await supabase.from('observation_images').insert(imageRecords);
+          if (imgError) {
+            // Clean up observation if image upload fails
+            await supabase.from('observations').delete().eq('id', obs.id);
+            return new Response(
+              JSON.stringify({ success: false, error: 'Failed to save images: ' + imgError.message }),
+              { status: 500, headers }
+            );
+          }
+        }
+        return new Response(
+          JSON.stringify({ success: true, data: obs }),
+          { status: 201, headers }
+        );
+      } catch (error) {
+        return new Response(
+          JSON.stringify({ success: false, error: error.message }),
+          { status: 500, headers }
+        );
+      }
     }
   }
 

@@ -289,9 +289,8 @@ class FrontendApiClient {
         observation_date: observationData.date || new Date().toISOString().split('T')[0],
         notes: observationData.notes || '',
         is_public: true,
-        // Using placeholders for now as per original logic
-        lepidoptera_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
-        plant_id: 'f47ac10b-58cc-4372-a567-0e02b2c3d480',
+        lepidoptera_id: observationData.lepidoptera_id,
+        plant_id: observationData.plant_id,
       })
       .select()
       .single();
