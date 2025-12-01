@@ -6,12 +6,10 @@ import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "./utils";
 
-function Menubar({
-  className,
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.Root>) {
+const Menubar = React.forwardRef<any, React.ComponentProps<typeof MenubarPrimitive.Root>>(({ className, ...props }, ref) => {
   return (
     <MenubarPrimitive.Root
+      ref={ref}
       data-slot="menubar"
       className={cn(
         "bg-background flex h-9 items-center gap-1 rounded-md border p-1 shadow-xs",
@@ -20,40 +18,35 @@ function Menubar({
       {...props}
     />
   );
-}
+});
+Menubar.displayName = "Menubar";
 
-function MenubarMenu({
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.Menu>) {
-  return <MenubarPrimitive.Menu data-slot="menubar-menu" {...props} />;
-}
+const MenubarMenu = React.forwardRef<any, React.ComponentProps<typeof MenubarPrimitive.Menu>>((props, ref) => {
+  return <MenubarPrimitive.Menu ref={ref} data-slot="menubar-menu" {...props} />;
+});
+MenubarMenu.displayName = "MenubarMenu";
 
-function MenubarGroup({
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.Group>) {
-  return <MenubarPrimitive.Group data-slot="menubar-group" {...props} />;
-}
+const MenubarGroup = React.forwardRef<any, React.ComponentProps<typeof MenubarPrimitive.Group>>((props, ref) => {
+  return <MenubarPrimitive.Group ref={ref} data-slot="menubar-group" {...props} />;
+});
+MenubarGroup.displayName = "MenubarGroup";
 
-function MenubarPortal({
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.Portal>) {
-  return <MenubarPrimitive.Portal data-slot="menubar-portal" {...props} />;
-}
+const MenubarPortal = React.forwardRef<any, React.ComponentProps<typeof MenubarPrimitive.Portal>>((props, ref) => {
+  return <MenubarPrimitive.Portal ref={ref} data-slot="menubar-portal" {...props} />;
+});
+MenubarPortal.displayName = "MenubarPortal";
 
-function MenubarRadioGroup({
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.RadioGroup>) {
+const MenubarRadioGroup = React.forwardRef<any, React.ComponentProps<typeof MenubarPrimitive.RadioGroup>>((props, ref) => {
   return (
-    <MenubarPrimitive.RadioGroup data-slot="menubar-radio-group" {...props} />
+    <MenubarPrimitive.RadioGroup ref={ref} data-slot="menubar-radio-group" {...props} />
   );
-}
+});
+MenubarRadioGroup.displayName = "MenubarRadioGroup";
 
-function MenubarTrigger({
-  className,
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.Trigger>) {
+const MenubarTrigger = React.forwardRef<any, React.ComponentProps<typeof MenubarPrimitive.Trigger>>(({ className, ...props }, ref) => {
   return (
     <MenubarPrimitive.Trigger
+      ref={ref}
       data-slot="menubar-trigger"
       className={cn(
         "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground flex items-center rounded-sm px-2 py-1 text-sm font-medium outline-hidden select-none",
@@ -62,18 +55,14 @@ function MenubarTrigger({
       {...props}
     />
   );
-}
+});
+MenubarTrigger.displayName = "MenubarTrigger";
 
-function MenubarContent({
-  className,
-  align = "start",
-  alignOffset = -4,
-  sideOffset = 8,
-  ...props
-}: React.ComponentProps<typeof MenubarPrimitive.Content>) {
+const MenubarContent = React.forwardRef<any, React.ComponentProps<typeof MenubarPrimitive.Content>>(({ className, align = "start", alignOffset = -4, sideOffset = 8, ...props }, ref) => {
   return (
     <MenubarPortal>
       <MenubarPrimitive.Content
+        ref={ref}
         data-slot="menubar-content"
         align={align}
         alignOffset={alignOffset}
@@ -86,7 +75,8 @@ function MenubarContent({
       />
     </MenubarPortal>
   );
-}
+});
+MenubarContent.displayName = "MenubarContent";
 
 function MenubarItem({
   className,

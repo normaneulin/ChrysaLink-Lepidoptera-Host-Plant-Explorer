@@ -5,44 +5,34 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 
 import { cn } from "./utils";
 
-function TooltipProvider({
-  delayDuration = 0,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+const TooltipProvider = React.forwardRef<any, React.ComponentProps<typeof TooltipPrimitive.Provider>>(({ delayDuration = 0, ...props }, ref) => {
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
-      {...props}
-    />
+    <TooltipPrimitive.Provider ref={ref} data-slot="tooltip-provider" delayDuration={delayDuration} {...props} />
   );
-}
+});
+TooltipProvider.displayName = "TooltipProvider";
 
-function Tooltip({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Root>) {
+const Tooltip = React.forwardRef<any, React.ComponentProps<typeof TooltipPrimitive.Root>>((props, ref) => {
   return (
     <TooltipProvider>
-      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+      <TooltipPrimitive.Root ref={ref} data-slot="tooltip" {...props} />
     </TooltipProvider>
   );
-}
+});
+Tooltip.displayName = "Tooltip";
 
-function TooltipTrigger({
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Trigger>) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
-}
+const TooltipTrigger = React.forwardRef<any, React.ComponentProps<typeof TooltipPrimitive.Trigger>>(
+  (props, ref) => {
+    return <TooltipPrimitive.Trigger ref={ref} data-slot="tooltip-trigger" {...props} />;
+  }
+);
+TooltipTrigger.displayName = "TooltipTrigger";
 
-function TooltipContent({
-  className,
-  sideOffset = 0,
-  children,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
+const TooltipContent = React.forwardRef<any, React.ComponentProps<typeof TooltipPrimitive.Content>>(({ className, sideOffset = 0, children, ...props }, ref) => {
   return (
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
+        ref={ref}
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
@@ -56,6 +46,7 @@ function TooltipContent({
       </TooltipPrimitive.Content>
     </TooltipPrimitive.Portal>
   );
-}
+});
+TooltipContent.displayName = "TooltipContent";
 
 export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };

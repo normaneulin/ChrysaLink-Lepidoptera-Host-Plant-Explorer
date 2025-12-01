@@ -1,5 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader,
+  DialogTitle,
+  DialogDescription 
+} from './ui/dialog';
+import * as RadixDialog from '@radix-ui/react-dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -222,11 +229,11 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   return (
     <Dialog open={internalOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="!max-w-6xl max-h-[90vh] overflow-y-auto" aria-describedby="upload-observation-description">
-        <div id="upload-observation-description" className="sr-only">
+        <RadixDialog.Description id="upload-observation-description" className="sr-only">
           Upload a new observation, including images and details.
-        </div>
+        </RadixDialog.Description>
         <DialogHeader>
-          <DialogTitle>Upload Observation</DialogTitle>
+          <RadixDialog.Title>Upload Observation</RadixDialog.Title>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">

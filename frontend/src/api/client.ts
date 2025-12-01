@@ -40,7 +40,13 @@ class FrontendApiClient {
     }
 
     try {
-      const response = await fetch(`${BACKEND_URL}${endpoint}`, {
+      const fetchUrl = `${BACKEND_URL}${endpoint}`;
+      // Debug: log the outgoing function URL and whether an access token is provided
+      // (Do not log the token itself to avoid leaking secrets)
+      // eslint-disable-next-line no-console
+      console.debug('API client request ->', { url: fetchUrl, hasAccessToken: !!accessToken });
+
+      const response = await fetch(fetchUrl, {
         method,
         headers,
         body: body ? JSON.stringify(body) : undefined,

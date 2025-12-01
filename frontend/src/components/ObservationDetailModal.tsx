@@ -1,6 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+//import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader,
+  DialogTitle,
+  DialogDescription 
+} from './ui/dialog';
+import * as RadixDialog from '@radix-ui/react-dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -40,6 +47,96 @@ export function ObservationDetailModal({
       // Optionally handle error
     }
   };
+
+  // Fetch comments from Supabase and attach to localObservation
+  const fetchCommentsFromSupabase = async () => {
+    if (!observation?.id) return;
+    try {
+      // Prefer fetching comments from our backend edge function (returns comments with user info)
+      try {
+        const edgeResp = await apiClient.get(`/observations/${observation.id}/comments`, accessToken);
+        if (edgeResp.success && Array.isArray(edgeResp.data)) {
+          setLocalObservation((prev: any) => ({ ...(prev || {}), comments: edgeResp.data }));
+          return;
+        }
+      } catch (e) {
+        // ignore and fallback to direct Supabase fetch below
+      }
+
+      // Try to fetch comments with joined profile via PostgREST relationship.
+      const res = await supabase
+        .from('comments')
+        .select('id, text, created_at, user_id, user:profiles(id, username, name, avatar_url)')
+        .eq('observation_id', observation.id)
+        .order('created_at', { ascending: true });
+
+      // If the relationship select failed because the FK relationship isn't available
+      // in the PostgREST schema cache, fall back to two-step fetch: comments then profiles.
+      if (res.error) {
+        const msg = String(res.error.message || res.error);
+        if (msg.includes('Could not find a relationship') || msg.includes('relationship')) {
+          // Fallback: fetch comments without join
+          const { data: commentsOnly, error: commentsError } = await supabase
+            .from('comments')
+            .select('id, text, created_at, user_id')
+            .eq('observation_id', observation.id)
+            .order('created_at', { ascending: true });
+
+          if (commentsError) {
+            console.warn('Failed to fetch comments (fallback):', commentsError.message || commentsError);
+            return;
+          }
+
+          const userIds = Array.from(new Set((commentsOnly || []).map((c: any) => c.user_id).filter(Boolean)));
+          let profilesMap: Record<string, any> = {};
+          if (userIds.length > 0) {
+            const { data: profilesData, error: profilesError } = await supabase
+              .from('profiles')
+              .select('id, username, name, avatar_url')
+              .in('id', userIds);
+
+            if (!profilesError && profilesData) {
+              profilesMap = (profilesData || []).reduce((acc: any, p: any) => {
+                acc[p.id] = p;
+                return acc;
+              }, {} as Record<string, any>);
+            }
+          }
+
+          const comments = (commentsOnly || []).map((c: any) => ({
+            id: c.id,
+            text: c.text,
+            created_at: c.created_at,
+            createdAt: c.created_at,
+            userId: c.user_id,
+            userName: profilesMap[c.user_id]?.username || profilesMap[c.user_id]?.name || 'User',
+            userAvatar: profilesMap[c.user_id]?.avatar_url || null,
+          }));
+
+          setLocalObservation((prev: any) => ({ ...(prev || {}), comments }));
+          return;
+        }
+
+        console.warn('Failed to fetch comments from Supabase:', res.error.message || res.error);
+        return;
+      }
+
+      const data = res.data;
+      const comments = (data || []).map((c: any) => ({
+        id: c.id,
+        text: c.text,
+        created_at: c.created_at,
+        createdAt: c.created_at,
+        userId: c.user_id,
+        userName: c.user?.username || c.user?.name || 'User',
+        userAvatar: c.user?.avatar_url || null,
+      }));
+
+      setLocalObservation((prev: any) => ({ ...(prev || {}), comments }));
+    } catch (e) {
+      console.error('Exception fetching comments:', e);
+    }
+  };
   // --- State ---
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,6 +154,18 @@ export function ObservationDetailModal({
   useEffect(() => {
     setLocalObservation(observation);
   }, [observation]);
+
+  // When modal opens or observation changes, fetch latest details and comments
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!observation?.id) return;
+    // Fetch observation details then comments (sequentially) to keep comments attached
+    (async () => {
+      await fetchObservationDetails();
+      await fetchCommentsFromSupabase();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, observation?.id]);
 
   // --- Derived State: Unified Activity Feed ---
   const activityFeed = useMemo(() => {
@@ -89,7 +198,8 @@ export function ObservationDetailModal({
       if (response.success) {
         toast.success('Comment added!');
         setComment('');
-        fetchObservationDetails();
+        await fetchObservationDetails();
+        await fetchCommentsFromSupabase();
         onUpdate();
       } else {
         toast.error(response.error || 'Failed to add comment');
@@ -154,22 +264,22 @@ export function ObservationDetailModal({
         aria-labelledby="observation-dialog-title"
         aria-describedby="observation-dialog-description"
       >
-        <DialogTitle id="observation-dialog-title" style={{position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0}}>
+        <RadixDialog.Title id="observation-dialog-title" style={{position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0}}>
           Observation Details
-        </DialogTitle>
-        <DialogDescription id="observation-dialog-description" style={{position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0}}>
+        </RadixDialog.Title>
+        <RadixDialog.Description id="observation-dialog-description" style={{position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0}}>
           Detailed view of the observation including images, species identification, and user activity.
-        </DialogDescription>
+        </RadixDialog.Description>
 
     
         
         {/* Header Title */}
         <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-          <DialogTitle className="text-lg font-bold text-center flex items-center justify-center gap-2 text-gray-800">
+          <RadixDialog.Title className="text-lg font-bold text-center flex items-center justify-center gap-2 text-gray-800">
             <span className="text-amber-700">{lepName}</span>
             <ArrowRightLeft className="h-4 w-4 text-gray-400" />
             <span className="text-green-700">{plantName}</span>
-          </DialogTitle>
+          </RadixDialog.Title>
         </div>
 
         <div className="p-6 space-y-6">

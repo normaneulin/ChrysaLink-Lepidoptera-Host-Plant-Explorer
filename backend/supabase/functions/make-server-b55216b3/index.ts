@@ -309,24 +309,37 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     if (req.method === 'GET') {
-      // List comments for observation
+      // List comments for observation (robust: fetch comments then batch-fetch profiles)
       try {
-        // Get comments and join user info
-        const { data: comments, error } = await supabase
+        const { data: commentsData, error: commentsError } = await supabase
           .from('comments')
-          .select('id, text, created_at, user_id, user:profiles(id, username, name, avatar_url)')
+          .select('id, text, created_at, user_id')
           .eq('observation_id', obsId)
           .order('created_at', { ascending: true });
-        if (error) throw error;
-        // Format for frontend
-        const formatted = (comments || []).map(c => ({
+        if (commentsError) throw commentsError;
+
+        // Batch fetch profiles for the comments' authors
+        const userIds = Array.from(new Set((commentsData || []).map((c: any) => c.user_id).filter(Boolean)));
+        let profilesMap: Record<string, any> = {};
+        if (userIds.length > 0) {
+          const { data: profilesData } = await supabase
+            .from('profiles')
+            .select('id, username, name, avatar_url')
+            .in('id', userIds);
+          if (profilesData) {
+            for (const p of profilesData) profilesMap[p.id] = p;
+          }
+        }
+
+        const formatted = (commentsData || []).map((c: any) => ({
           id: c.id,
           text: c.text,
           createdAt: c.created_at,
           userId: c.user_id,
-          userName: c.user?.username || c.user?.name || 'Unknown',
-          userAvatar: c.user?.avatar_url || null,
+          userName: profilesMap[c.user_id]?.username || profilesMap[c.user_id]?.name || 'Unknown',
+          userAvatar: profilesMap[c.user_id]?.avatar_url || null,
         }));
+
         return new Response(
           JSON.stringify({ success: true, data: formatted }),
           { status: 200, headers }
@@ -457,20 +470,32 @@ Deno.serve(async (req) => {
       const lepImg = images?.find(i => i.image_type === 'lepidoptera');
       const plantImg = images?.find(i => i.image_type === 'plant');
 
-      // Get comments with user info
-      const { data: comments } = await supabase
+      // Get comments (robust: fetch comments then batch-fetch profiles)
+      const { data: commentsData } = await supabase
         .from('comments')
-        .select('id, text, created_at, user_id, user:profiles(id, username, name, avatar_url)')
+        .select('id, text, created_at, user_id')
         .eq('observation_id', obsId)
         .order('created_at', { ascending: true });
 
-      const formattedComments = (comments || []).map(c => ({
+      const userIds = Array.from(new Set((commentsData || []).map((c: any) => c.user_id).filter(Boolean)));
+      let profilesMap: Record<string, any> = {};
+      if (userIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, username, name, avatar_url')
+          .in('id', userIds);
+        if (profilesData) {
+          for (const p of profilesData) profilesMap[p.id] = p;
+        }
+      }
+
+      const formattedComments = (commentsData || []).map((c: any) => ({
         id: c.id,
         text: c.text,
         createdAt: c.created_at,
         userId: c.user_id,
-        userName: c.user?.username || c.user?.name || 'Unknown',
-        userAvatar: c.user?.avatar_url || null,
+        userName: profilesMap[c.user_id]?.username || profilesMap[c.user_id]?.name || 'Unknown',
+        userAvatar: profilesMap[c.user_id]?.avatar_url || null,
       }));
 
       // Compose response
