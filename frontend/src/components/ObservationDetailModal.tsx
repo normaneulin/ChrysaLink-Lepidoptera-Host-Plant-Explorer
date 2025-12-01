@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -154,10 +155,15 @@ export function ObservationDetailModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0" aria-describedby="observation-detail-description">
-        <div id="observation-detail-description" className="sr-only">
-          Detailed information about the observation, including images, comments, and activity.
-        </div>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+        <DialogHeader className="sr-only">
+          <DialogTitle>Observation Details</DialogTitle>
+          <DialogDescription>
+            Detailed view of the observation including images, species identification, and user activity.
+          </DialogDescription>
+        </DialogHeader>
+
+    
         
         {/* Header Title */}
         <div className="p-4 border-b border-gray-100 bg-gray-50/50">
