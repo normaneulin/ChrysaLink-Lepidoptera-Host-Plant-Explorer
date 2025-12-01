@@ -50,33 +50,26 @@ export function ObservationDetailModal({
   const activityFeed = useMemo(() => {
     const comments = (localObservation.comments || []).map((c: any) => ({
       type: 'comment',
-      id: c.id,
-      date: new Date(c.createdAt || c.created_at),
-      user: { name: c.userName, avatar: c.userAvatar },
-      content: c.text
-    }));
+      return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0" aria-describedby="observation-detail-description">
+            {/* Header Title (must be first child for accessibility) */}
+            <DialogTitle className="text-lg font-bold text-center flex items-center justify-center gap-2 text-gray-800">
+              <span className="text-amber-700">{lepName}</span>
+              <ArrowRightLeft className="h-4 w-4 text-gray-400" />
+              <span className="text-green-700">{plantName}</span>
+            </DialogTitle>
+            {/* Visually hidden description for screen readers */}
+            <DialogDescription id="observation-detail-description" className="sr-only">
+              Detailed view of the observation including images, species identification, and user activity.
+            </DialogDescription>
 
-    const identifications = (localObservation.identifications || []).map((i: any) => ({
-      type: 'identification',
-      subtype: i.identificationType || (i.species === localObservation?.lepidoptera?.species ? 'lepidoptera' : 'hostPlant'),
-      id: i.id,
-      date: new Date(i.createdAt || i.created_at),
-      user: { name: i.userName, avatar: i.userAvatar },
-      species: i.species,
-      scientificName: i.scientificName,
-      verified: i.verified,
-      thumb: i.taxonThumb
-    }));
-
-    return [...comments, ...identifications].sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [localObservation]);
-
-  // --- Handlers ---
-  const fetchObservationDetails = async () => {
-    try {
-      const response = await apiClient.get(`/observations/${observation.id}`, accessToken);
-      if (response.success) {
-        setLocalObservation(response.data);
+            <div className="p-6 space-y-6">
+              {/* ...existing code... */}
+            </div>
+          </DialogContent>
+        </Dialog>
+      );
       } else if (response.status === 404) {
         toast.error('Observation not found or deleted.');
         onClose();
