@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -153,12 +154,12 @@ export function ObservationDetailModal({
         aria-labelledby="observation-dialog-title"
         aria-describedby="observation-dialog-description"
       >
-        <DialogHeader className="sr-only">
-          <DialogTitle id="observation-dialog-title">Observation Details</DialogTitle>
-          <DialogDescription id="observation-dialog-description">
-            Detailed view of the observation including images, species identification, and user activity.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogTitle id="observation-dialog-title" style={{position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0}}>
+          Observation Details
+        </DialogTitle>
+        <DialogDescription id="observation-dialog-description" style={{position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0}}>
+          Detailed view of the observation including images, species identification, and user activity.
+        </DialogDescription>
 
     
         
