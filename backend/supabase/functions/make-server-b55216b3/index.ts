@@ -289,8 +289,67 @@ Deno.serve(async (req) => {
 
       if (error) throw error;
 
+      // Normalize field names for frontend: createdAt, read
+      const normalized = (notifications || []).map((n: any) => ({
+        id: n.id,
+        userId: n.user_id,
+        observationId: n.observation_id,
+        identificationId: n.identification_id,
+        commentId: n.comment_id,
+        type: n.type,
+        message: n.message,
+        read: !!n.is_read || !!n.read,
+        readAt: n.read_at || null,
+        createdAt: n.created_at ? new Date(n.created_at).toISOString() : null,
+      }));
+
       return new Response(
-        JSON.stringify({ success: true, data: notifications }),
+        JSON.stringify({ success: true, data: normalized }),
+        { status: 200, headers }
+      );
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ success: false, error: error.message }),
+        { status: 500, headers }
+      );
+    }
+  }
+
+  // --- Mark Notification as Read ---
+  if (path.match(/^\/notifications\/[\w-]+\/read$/) && req.method === 'POST') {
+    try {
+      const notifId = path.split('/')[2];
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unauthorized' }),
+          { status: 401, headers }
+        );
+      }
+      const token = authHeader.replace('Bearer ', '');
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Invalid token' }),
+          { status: 401, headers }
+        );
+      }
+
+      // Update notification to read for this user
+      const { error: updateError } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', notifId)
+        .eq('user_id', user.id);
+
+      if (updateError) throw updateError;
+
+      return new Response(
+        JSON.stringify({ success: true }),
         { status: 200, headers }
       );
     } catch (error) {
@@ -399,15 +458,24 @@ Deno.serve(async (req) => {
           .single();
         if (!obsError && obs && obs.user_id !== user.id) {
           // Create notification for owner
-          await supabase
-            .from('notifications')
-            .insert({
-              user_id: obs.user_id,
-              observation_id: obsId,
-              comment_id: comment.id,
-              type: 'new_comment',
-              message: `${user.username || user.email || 'Someone'} commented on your observation`,
-            });
+            // Try to prefer the profile username (stored in profiles) over auth.email
+            const { data: commenterProfile } = await supabase
+              .from('profiles')
+              .select('username, name')
+              .eq('id', user.id)
+              .single();
+
+            const actorName = commenterProfile?.username || commenterProfile?.name || user.email || 'Someone';
+
+            await supabase
+              .from('notifications')
+              .insert({
+                user_id: obs.user_id,
+                observation_id: obsId,
+                comment_id: comment.id,
+                type: 'new_comment',
+                message: `${actorName} commented on your observation`,
+              });
         }
         // Return new comment
         return new Response(

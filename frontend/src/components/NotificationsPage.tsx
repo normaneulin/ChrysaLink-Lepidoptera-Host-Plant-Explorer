@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
+import { ObservationDetailModal } from './ObservationDetailModal';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -20,12 +21,14 @@ interface Notification {
 
 interface NotificationsPageProps {
   accessToken: string;
+  onNotificationRead?: (id?: string) => void;
 }
 
-export function NotificationsPage({ accessToken }: NotificationsPageProps) {
+export function NotificationsPage({ accessToken, onNotificationRead }: NotificationsPageProps) {
   const [, setLocation] = useLocation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedObservation, setSelectedObservation] = useState<any | null>(null);
 
   useEffect(() => {
     fetchNotifications();
@@ -58,21 +61,40 @@ export function NotificationsPage({ accessToken }: NotificationsPageProps) {
         accessToken
       );
 
-      if (response.ok) {
+      if (response.success) {
         setNotifications(prev =>
           prev.map(notif =>
             notif.id === notificationId ? { ...notif, read: true } : notif
           )
         );
+        // Inform parent (App) to decrement the badge count
+        if (onNotificationRead) onNotificationRead(notificationId);
+        return true;
       }
+      return false;
     } catch (error) {
       console.error('Error marking notification as read:', error);
+      return false;
     }
   };
 
-  const handleNotificationClick = (notification: Notification) => {
-    markAsRead(notification.id);
-    setLocation(`/explore`); // Navigate to explore page
+  const handleNotificationClick = async (notification: Notification) => {
+    // Mark notification as read first
+    const ok = await markAsRead(notification.id);
+
+    // Open the observation modal by fetching observation details
+    try {
+      const resp = await apiClient.get(`/observations/${notification.observationId}`, accessToken);
+      if (resp.success && resp.data) {
+        setSelectedObservation(resp.data);
+      } else {
+        // If we couldn't fetch details, still navigate to explore
+        setLocation('/explore');
+      }
+    } catch (e) {
+      console.error('Failed to fetch observation for notification:', e);
+      setLocation('/explore');
+    }
   };
 
   const getNotificationIcon = (type: string) => {
@@ -125,7 +147,7 @@ export function NotificationsPage({ accessToken }: NotificationsPageProps) {
             <Card
               key={notification.id}
               className={`cursor-pointer hover:shadow-md transition-shadow ${
-                !notification.read ? 'border-l-4 border-l-green-600 bg-green-50' : ''
+                !notification.read ? 'border-l-4 border-l-green-600 bg-green-50' : 'bg-gray-50'
               }`}
               onClick={() => handleNotificationClick(notification)}
             >
@@ -167,6 +189,16 @@ export function NotificationsPage({ accessToken }: NotificationsPageProps) {
             Mark All as Read
           </Button>
         </div>
+      )}
+
+      {selectedObservation && (
+        <ObservationDetailModal
+          observation={selectedObservation}
+          isOpen={!!selectedObservation}
+          onClose={() => setSelectedObservation(null)}
+          accessToken={accessToken}
+          onUpdate={fetchNotifications}
+        />
       )}
     </div>
   );
