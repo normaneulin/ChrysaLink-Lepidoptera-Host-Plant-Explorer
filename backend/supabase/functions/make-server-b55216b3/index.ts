@@ -27,6 +27,7 @@ Deno.serve(async (req) => {
     );
   }
 
+  // --- Species Search ---
   if (path === '/species/search') {
     try {
       const query = url.searchParams.get('q');
@@ -165,6 +166,7 @@ Deno.serve(async (req) => {
     }
   }
 
+  // --- Notifications ---
   if (path === '/notifications') {
     return new Response(
       JSON.stringify({ success: true, data: [] }),
@@ -172,56 +174,222 @@ Deno.serve(async (req) => {
     );
   }
 
+  // --- Observation Comments ---
+  if (path.match(/^\/observations\/[\w-]+\/comments$/)) {
+    const obsId = path.split('/')[2];
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    if (req.method === 'GET') {
+      // List comments for observation
+      try {
+        // Get comments and join user info
+        const { data: comments, error } = await supabase
+          .from('comments')
+          .select('id, text, created_at, user_id, user:profiles(id, username, name, avatar_url)')
+          .eq('observation_id', obsId)
+          .order('created_at', { ascending: true });
+        if (error) throw error;
+        // Format for frontend
+        const formatted = (comments || []).map(c => ({
+          id: c.id,
+          text: c.text,
+          createdAt: c.created_at,
+          userId: c.user_id,
+          userName: c.user?.username || c.user?.name || 'Unknown',
+          userAvatar: c.user?.avatar_url || null,
+        }));
+        return new Response(
+          JSON.stringify({ success: true, data: formatted }),
+          { status: 200, headers }
+        );
+      } catch (error) {
+        return new Response(
+          JSON.stringify({ success: false, error: error.message }),
+          { status: 500, headers }
+        );
+      }
+    } else if (req.method === 'POST') {
+      // Add a comment
+      try {
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Unauthorized' }),
+            { status: 401, headers }
+          );
+        }
+        const token = authHeader.replace('Bearer ', '');
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Invalid token' }),
+            { status: 401, headers }
+          );
+        }
+        const body = await req.json();
+        if (!body.text || !body.text.trim()) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Comment text required' }),
+            { status: 400, headers }
+          );
+        }
+        // Insert comment
+        const { data: comment, error: dbError } = await supabase
+          .from('comments')
+          .insert({
+            observation_id: obsId,
+            user_id: user.id,
+            text: body.text,
+          })
+          .select()
+          .single();
+        if (dbError) {
+          return new Response(
+            JSON.stringify({ success: false, error: dbError.message }),
+            { status: 500, headers }
+          );
+        }
+        // Fetch observation to get owner
+        const { data: obs, error: obsError } = await supabase
+          .from('observations')
+          .select('id, user_id')
+          .eq('id', obsId)
+          .single();
+        if (!obsError && obs && obs.user_id !== user.id) {
+          // Create notification for owner
+          await supabase
+            .from('notifications')
+            .insert({
+              user_id: obs.user_id,
+              observation_id: obsId,
+              comment_id: comment.id,
+              type: 'new_comment',
+              message: `${user.username || user.email || 'Someone'} commented on your observation`,
+            });
+        }
+        // Return new comment
+        return new Response(
+          JSON.stringify({ success: true, data: comment }),
+          { status: 201, headers }
+        );
+      } catch (error) {
+        return new Response(
+          JSON.stringify({ success: false, error: error.message }),
+          { status: 500, headers }
+        );
+      }
+    } else {
+      return new Response(
+        JSON.stringify({ error: 'Method not allowed' }),
+        { status: 405, headers }
+      );
+    }
+  }
+
+  // --- Observations ---
   if (path === '/observations') {
     if (req.method === 'GET') {
-      // List observations
+      // List observations or get single observation with comments
       try {
         const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
         const supabase = createClient(supabaseUrl, supabaseKey);
 
+        // If path is /observations/{id}, return single observation with comments
+        if (path.match(/^\/observations\/[\w-]+$/)) {
+          const obsId = path.split('/')[2];
+          // Get observation
+          const { data: obs, error: obsError } = await supabase
+            .from('observations')
+            .select(`*,
+              lepidoptera:lepidoptera_taxonomy(scientific_name, common_name, family),
+              plant:plant_taxonomy(scientific_name, common_name, family)
+            `)
+            .eq('id', obsId)
+            .single();
+          if (obsError || !obs) {
+            return new Response(
+              JSON.stringify({ success: false, error: obsError?.message || 'Not found' }),
+              { status: 404, headers }
+            );
+          }
+          // Get user profile
+          const { data: userProfile } = await supabase
+            .from('profiles')
+            .select('id, name, username, avatar_url, observation_count')
+            .eq('id', obs.user_id)
+            .single();
+          // Get images
+          const { data: images } = await supabase
+            .from('observation_images')
+            .select('observation_id, image_url, image_type')
+            .eq('observation_id', obsId);
+          const lepImg = images?.find(i => i.image_type === 'lepidoptera');
+          const plantImg = images?.find(i => i.image_type === 'plant');
+          // Get comments with user info
+          const { data: comments } = await supabase
+            .from('comments')
+            .select('id, text, created_at, user_id, user:profiles(id, username, name, avatar_url)')
+            .eq('observation_id', obsId)
+            .order('created_at', { ascending: true });
+          const formattedComments = (comments || []).map(c => ({
+            id: c.id,
+            text: c.text,
+            createdAt: c.created_at,
+            userId: c.user_id,
+            userName: c.user?.username || c.user?.name || 'Unknown',
+            userAvatar: c.user?.avatar_url || null,
+          }));
+          // Compose response
+          const enriched = {
+            ...obs,
+            user: userProfile || null,
+            lepidoptera_image_url: lepImg ? lepImg.image_url : null,
+            plant_image_url: plantImg ? plantImg.image_url : null,
+            image_url: lepImg ? lepImg.image_url : (plantImg ? plantImg.image_url : null),
+            comments: formattedComments,
+          };
+          return new Response(
+            JSON.stringify({ success: true, data: enriched }),
+            { status: 200, headers }
+          );
+        }
+
+        // Otherwise, list observations
         const userId = url.searchParams.get('userId');
         const limit = parseInt(url.searchParams.get('limit') || '50', 10);
-
-        // Query observations first
         let query = supabase
           .from('observations')
-          .select(`
-            *,
+          .select(`*,
             lepidoptera:lepidoptera_taxonomy(scientific_name, common_name, family),
             plant:plant_taxonomy(scientific_name, common_name, family)
           `)
           .order('created_at', { ascending: false })
           .limit(limit);
-
         if (userId) {
           query = query.eq('user_id', userId);
         }
-
         const { data: observations, error } = await query;
-
         if (error) {
           console.error('Fetch observations error:', error);
           throw error;
         }
-
         if (!observations || observations.length === 0) {
           return new Response(
             JSON.stringify({ success: true, data: [] }),
             { status: 200, headers }
           );
         }
-
         // Fetch user profiles separately to avoid join issues
         const userIds = [...new Set(observations.map(o => o.user_id).filter(Boolean))];
         const profilesMap = new Map();
-        
         if (userIds.length > 0) {
           const { data: profileData, error: profileError } = await supabase
             .from('profiles')
             .select('id, name, username, avatar_url')
             .in('id', userIds);
-
           if (profileError) {
             console.warn('Could not fetch profiles:', profileError.message);
           } else if (profileData) {
@@ -230,7 +398,6 @@ Deno.serve(async (req) => {
             }
           }
         }
-
         // Fetch images for all observations
         const obsIds = observations.map(o => o.id);
         let imagesMap = new Map();
@@ -246,7 +413,6 @@ Deno.serve(async (req) => {
             }
           }
         }
-
         // Attach user profiles and image URLs to observations
         const enrichedObservations = observations.map(obs => {
           const images = imagesMap.get(obs.id) || [];
@@ -260,7 +426,6 @@ Deno.serve(async (req) => {
             image_url: lepImg ? lepImg.image_url : (plantImg ? plantImg.image_url : null)
           };
         });
-
         return new Response(
           JSON.stringify({ success: true, data: enrichedObservations }),
           { status: 200, headers }

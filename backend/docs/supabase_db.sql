@@ -104,6 +104,8 @@ CREATE TABLE public.observations (
   is_public boolean DEFAULT true,
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  lepidoptera_current_identification text,
+  plant_current_identification text,
   CONSTRAINT observations_pkey PRIMARY KEY (id),
   CONSTRAINT observations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
   CONSTRAINT observations_lepidoptera_id_fkey FOREIGN KEY (lepidoptera_id) REFERENCES public.lepidoptera_taxonomy(id),
