@@ -20,6 +20,95 @@ Deno.serve(async (req) => {
   const headers = { ...corsHeaders, 'Content-Type': 'application/json' };
 
   // Route handling
+    // --- Observation Deletion with Storage Cleanup ---
+    if (path.match(/^\/observations\/[\w-]+$/) && req.method === 'DELETE') {
+      try {
+        const obsId = path.split('/')[2];
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        // Get observation details
+        const { data: obs, error: obsError } = await supabase
+          .from('observations')
+          .select('id, user_id')
+          .eq('id', obsId)
+          .single();
+        if (obsError || !obs) {
+          return new Response(
+            JSON.stringify({ success: false, error: obsError?.message || 'Observation not found' }),
+            { status: 404, headers }
+          );
+        }
+        // List all images for this observation
+        const folder = `${obs.user_id}/${obs.id}/`;
+        const { data: files, error: filesError } = await supabase.storage.from('observation-images').list(folder);
+        if (!filesError && files && files.length > 0) {
+          const fileNames = files.map(f => `${folder}${f.name}`);
+          await supabase.storage.from('observation-images').remove(fileNames);
+        }
+        // Delete observation from database
+        const { error: dbError } = await supabase.from('observations').delete().eq('id', obsId);
+        if (dbError) {
+          return new Response(
+            JSON.stringify({ success: false, error: dbError.message }),
+            { status: 500, headers }
+          );
+        }
+        return new Response(
+          JSON.stringify({ success: true }),
+          { status: 200, headers }
+        );
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ success: false, error: e.message }),
+          { status: 500, headers }
+        );
+      }
+    }
+
+    // --- User Deletion with Storage Cleanup (utility endpoint) ---
+    if (path.match(/^\/users\/[\w-]+\/delete_with_images$/) && req.method === 'DELETE') {
+      try {
+        const userId = path.split('/')[2];
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        // Get all observations for user
+        const { data: observations, error: obsError } = await supabase
+          .from('observations')
+          .select('id')
+          .eq('user_id', userId);
+        if (obsError) {
+          return new Response(
+            JSON.stringify({ success: false, error: obsError.message }),
+            { status: 500, headers }
+          );
+        }
+        // For each observation, delete images
+        for (const obs of observations) {
+          const folder = `${userId}/${obs.id}/`;
+          const { data: files, error: filesError } = await supabase.storage.from('observation-images').list(folder);
+          if (!filesError && files && files.length > 0) {
+            const fileNames = files.map(f => `${folder}${f.name}`);
+            await supabase.storage.from('observation-images').remove(fileNames);
+          }
+        }
+        // Delete all observations for user
+        await supabase.from('observations').delete().eq('user_id', userId);
+        // Delete user profile
+        await supabase.from('profiles').delete().eq('id', userId);
+        // Optionally, delete from auth.users if you have access
+        return new Response(
+          JSON.stringify({ success: true }),
+          { status: 200, headers }
+        );
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ success: false, error: e.message }),
+          { status: 500, headers }
+        );
+      }
+    }
   if (path === '/' || path === '') {
     return new Response(
       JSON.stringify({ status: 'ok', message: 'ChrysaLink API v17 - With Database' }),
