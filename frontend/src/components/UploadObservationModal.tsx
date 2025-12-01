@@ -215,7 +215,10 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   };
   return (
     <Dialog open={internalOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="!max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="!max-w-6xl max-h-[90vh] overflow-y-auto" aria-describedby="upload-observation-description">
+        <div id="upload-observation-description" className="sr-only">
+          Upload a new observation, including images and details.
+        </div>
         <DialogHeader>
           <DialogTitle>Upload Observation</DialogTitle>
         </DialogHeader>
