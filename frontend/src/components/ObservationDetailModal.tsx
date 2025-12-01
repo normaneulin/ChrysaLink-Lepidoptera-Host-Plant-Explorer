@@ -31,16 +31,21 @@ export function ObservationDetailModal({
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localObservation, setLocalObservation] = useState(observation);
+  
+  // Suggestion State
   const [suggestSpecies, setSuggestSpecies] = useState('');
   const [suggestReason, setSuggestReason] = useState('');
-  const [activeTab, setActiveTab] = useState('comment');
+  
+  // Tab State
+  const [activeTab, setActiveTab] = useState('comment'); 
   const [suggestType, setSuggestType] = useState<'lepidoptera' | 'hostPlant'>('lepidoptera');
 
+  // --- Effects ---
   useEffect(() => {
     setLocalObservation(observation);
   }, [observation]);
 
-  // Activity feed combines comments and identifications, sorted by date
+  // --- Derived State: Unified Activity Feed ---
   const activityFeed = useMemo(() => {
     const comments = (localObservation.comments || []).map((c: any) => ({
       type: 'comment',
@@ -49,6 +54,7 @@ export function ObservationDetailModal({
       user: { name: c.userName, avatar: c.userAvatar },
       content: c.text
     }));
+
     const identifications = (localObservation.identifications || []).map((i: any) => ({
       type: 'identification',
       subtype: i.identificationType || (i.species === localObservation?.lepidoptera?.species ? 'lepidoptera' : 'hostPlant'),
@@ -60,10 +66,11 @@ export function ObservationDetailModal({
       verified: i.verified,
       thumb: i.taxonThumb
     }));
+
     return [...comments, ...identifications].sort((a, b) => a.date.getTime() - b.date.getTime());
   }, [localObservation]);
 
-  // Fetch observation details from API
+  // --- Handlers ---
   const fetchObservationDetails = async () => {
     try {
       const response = await apiClient.get(`/observations/${observation.id}`, accessToken);
@@ -79,7 +86,6 @@ export function ObservationDetailModal({
     }
   };
 
-  // Add a comment
   const handleAddComment = async () => {
     if (!comment.trim() || !accessToken) return;
     setIsSubmitting(true);
@@ -100,7 +106,6 @@ export function ObservationDetailModal({
     }
   };
 
-  // Suggest an ID (stub)
   const handleSuggestID = async () => {
     if (!suggestSpecies.trim() || !accessToken) return;
     toast.success(`Suggested ${suggestType} ID: ${suggestSpecies}`);
@@ -108,7 +113,6 @@ export function ObservationDetailModal({
     setSuggestReason('');
   };
 
-  // Delete observation
   const handleDelete = async () => {
     if (!window.confirm('Delete this observation?')) return;
     setIsSubmitting(true);
@@ -133,10 +137,9 @@ export function ObservationDetailModal({
   };
 
   // Helper values
-  // Show the current identification names
-  const lepName = localObservation.lepidoptera_current_identification || 'Unknown Lepidoptera';
-  const plantName = localObservation.plant_current_identification || 'Unknown Plant';
-  // Use observationDate for consistency with HomePage, now also checks observation_date
+  const lepName = localObservation.lepidoptera_current_identification || localObservation.lepidoptera?.species || 'Unknown Lepidoptera';
+  const plantName = localObservation.plant_current_identification || localObservation.hostPlant?.species || 'Unknown Plant';
+  
   const observationDate = localObservation.observed_at
     ? new Date(localObservation.observed_at)
     : localObservation.date_observed
@@ -146,6 +149,7 @@ export function ObservationDetailModal({
         : localObservation.observation_date
           ? new Date(localObservation.observation_date)
           : null;
+          
   const submittedDate = localObservation.created_at ? new Date(localObservation.created_at) : null;
 
   return (
@@ -180,7 +184,6 @@ export function ObservationDetailModal({
                  ) : (
                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">No Image</div>
                  )}
-                 {/* Removed overlay label */}
               </div>
               <div className="text-left">
                 <div className="font-bold text-gray-900 text-lg leading-tight">{lepName}</div>
@@ -202,7 +205,6 @@ export function ObservationDetailModal({
                  ) : (
                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm">No Image</div>
                  )}
-                 {/* Removed overlay label */}
               </div>
               <div className="text-left">
                 <div className="font-bold text-gray-900 text-lg leading-tight">{plantName}</div>
@@ -228,8 +230,8 @@ export function ObservationDetailModal({
               </div>
               {/* Owner Actions */}
               {currentUserId === localObservation.user.id && (
-                <Button variant="ghost" size="sm" className="ml-auto text-blue-500 hover:text-blue-600 hover:bg-blue-50" onClick={() => setActiveTab('edit')}>
-                  Edit
+                <Button variant="ghost" size="sm" className="ml-auto text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleDelete}>
+                  Delete
                 </Button>
               )}
             </div>

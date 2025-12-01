@@ -53,14 +53,18 @@ export const observationController = {
   async getObservationById(c: Context) {
     try {
       const id = c.req.param("id");
-
+      console.log(`[ObservationController] Fetching observation by ID: ${id}`);
       const observation = await ObservationService.getObservationById(id);
-
+      if (!observation) {
+        console.error(`[ObservationController] Observation not found for ID: ${id}`);
+        return c.json({ success: false, error: "Observation not found" }, 404);
+      }
       return c.json({
         success: true,
         data: observation,
       });
     } catch (error: any) {
+      console.error(`[ObservationController] Error fetching observation by ID: ${error?.message || error}`);
       const errorResponse = formatErrorResponse(error);
       return c.json(errorResponse, errorResponse.statusCode || 400);
     }
