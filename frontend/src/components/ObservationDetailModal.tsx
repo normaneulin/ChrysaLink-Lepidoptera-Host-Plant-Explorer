@@ -67,9 +67,15 @@ export function ObservationDetailModal({
   const fetchObservationDetails = async () => {
     try {
       const response = await apiClient.get(`/observations/${observation.id}`, accessToken);
-      if (response.success) setLocalObservation(response.data);
+      if (response.success) {
+        setLocalObservation(response.data);
+      } else if (response.status === 404) {
+        toast.error('Observation not found or deleted.');
+        onClose();
+      }
     } catch (error) {
       toast.error('Failed to fetch observation');
+      onClose();
     }
   };
 
