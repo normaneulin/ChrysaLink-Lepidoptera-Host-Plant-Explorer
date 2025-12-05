@@ -1,4 +1,7 @@
-# ChrysaLink — Lepidoptera Host Plant Explorer
+
+<p align="center">
+  <h1>ChrysaLink — Lepidoptera Host & Plant Explorer</h1>
+</p>
 
 <p align="center">
   <img src="frontend/public/navbar/logo.png" alt="ChrysaLink Logo" width="200"/>
@@ -20,10 +23,10 @@ ChrysaLink is a comprehensive web explorer that visualizes the intricate relatio
 
 ### Key Features
 
-- **Species Database**: Searchable repository of Lepidoptera species with detailed host plant information
-- **Interactive Visualizations**: Dynamic maps and network graphs illustrating species-plant relationships
-- **Observation Records**: Community-contributed sightings and occurrence data
-- **Educational Resources**: Accessible information for students, educators, and hobbyists
+- **AI-Powered ID**: Upload photos and get automated species identification using iNaturalist
+- **Explore Maps**: View geotagged observations on interactive maps
+- **Community Verification**: Collaborate with experts and citizen scientists to verify identifications
+- **Visualize Data**: Discover patterns in host plant relationships
 
 ### Target Audience
 
@@ -35,17 +38,9 @@ ChrysaLink is a comprehensive web explorer that visualizes the intricate relatio
 ## Technology Stack
 
 - **Frontend**: Vite, React, TypeScript
-- **Backend**: Supabase (PostgreSQL database, Edge Functions)
+- **Backend**: Supabase (PostgreSQL database)
 - **Data Processing**: Node.js, CSV datasets
 - **Deployment**: Vercel
-
-## Repository Structure
-```
-├── frontend/          # React application source code
-├── backend/           # Supabase functions and database schemas
-│   ├── data/         # Curated datasets (CSV format)
-│   └── docs/         # Database documentation and SQL schemas
-```
 
 ## Local Development
 
