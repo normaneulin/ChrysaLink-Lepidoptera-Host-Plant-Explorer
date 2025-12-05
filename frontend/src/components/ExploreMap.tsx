@@ -46,11 +46,15 @@ export default function ExploreMap({ observations, height = 600, onSelect, isMod
     : [0, 0];
 
   return (
-    <div 
-      style={{ height }} 
-      className={`rounded-lg overflow-hidden relative z-0 ${isModalOpen ? 'pointer-events-none' : ''}`}
+    <div
+      style={{ height, zIndex: isModalOpen ? 0 : undefined }}
+      className={`rounded-lg overflow-hidden relative ${isModalOpen ? 'pointer-events-none' : 'z-0'}`}
     >
-      <MapContainer center={center} zoom={firstWithCoords ? 8 : 2} style={{ height: '100%', width: '100%' }}>
+      <MapContainer
+        center={center}
+        zoom={firstWithCoords ? 8 : 2}
+        style={{ height: '100%', width: '100%', zIndex: isModalOpen ? 0 : undefined }}
+      >
         <LayersControl position="topright">
           {/* Satellite (default) - Esri World Imagery */}
           <LayersControl.BaseLayer checked name="Satellite">

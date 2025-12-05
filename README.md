@@ -23,7 +23,7 @@ ChrysaLink is a comprehensive web explorer that visualizes the intricate relatio
 
 ### Key Features
 
-- **AI-Powered ID**: Upload photos and get automated species identification using iNaturalist
+- **AI-Powered ID**: Upload photos and get automated species identification
 - **Explore Maps**: View geotagged observations on interactive maps
 - **Community Verification**: Collaborate with experts and citizen scientists to verify identifications
 - **Visualize Data**: Discover patterns in host plant relationships
@@ -88,7 +88,7 @@ Please refer to the LICENSE file in the repository root. For questions about dat
 
 - **Website**: [chrysalink.vercel.app](https://chrysalink.vercel.app/)
 - **Issues & Questions**: Open an issue in this repository
-- **Collaboration Inquiries**: Contact via GitHub issues
+- **Collaboration Inquiries**: Contact via chrysalink.org@gmail.com
 
 ---
 
