@@ -42,6 +42,126 @@ export function ObservationDetailModal({
       const response = await apiClient.get(`/observations/${observation.id}`, accessToken);
       if (response.success && response.data) {
         setLocalObservation(response.data);
+        // Debug: log identification objects so we can verify which taxonomy fields are present
+        // eslint-disable-next-line no-console
+        console.debug('Fetched observation identifications (first 5):', (response.data.identifications || []).slice(0, 5));
+        // Also log a compact view of relevant name fields for quick inspection
+        try {
+          const compact = (response.data.identifications || []).slice(0, 5).map((it: any) => ({
+            id: it.id,
+            species: it.species,
+            common_name: it.common_name || it.comm_name || it.commonName || it.comname || (it.species && it.species.common_name) || null,
+            scientific_name: it.scientific_name || it.scientificName || (it.species && (it.species.scientific_name || it.species.sciname || it.species.name)) || null,
+            keys: Object.keys(it || {})
+          }));
+          // eslint-disable-next-line no-console
+          console.debug('Identification name-fields summary:', compact);
+        } catch (e) {
+          // ignore
+        }
+        // Enrich identifications with taxonomy common name/scientific name when possible
+        try {
+          const idents = response.data.identifications || [];
+          if (idents.length > 0) {
+            // Collect taxon ids per table
+            const idsByTable: Record<string, Set<any>> = { lepidoptera_taxonomy: new Set(), plant_taxonomy: new Set() };
+            for (const it of idents) {
+              const taxonId = it.taxon_id || it.taxonId || (it.species && it.species.id) || null;
+              if (!taxonId) continue;
+              const typeRaw = (it.identificationType || it.identification_type || it.subtype || it.type || '').toString().toLowerCase();
+              const table = typeRaw.includes('plant') || typeRaw.includes('host') ? 'plant_taxonomy' : 'lepidoptera_taxonomy';
+              idsByTable[table].add(taxonId);
+            }
+
+            const fetchedByTableId: Record<string, Record<string, any>> = { lepidoptera_taxonomy: {}, plant_taxonomy: {} };
+
+            // Batch fetch per table
+            for (const table of Object.keys(idsByTable)) {
+              const ids = Array.from(idsByTable[table]);
+              if (ids.length === 0) continue;
+              // Query taxonomy rows
+              const { data: rows, error } = await supabase
+                .from(table)
+                .select('id, common_name, comm_name, display_name, scientific_name, sciname, name')
+                .in('id', ids as any[]);
+              if (!error && rows && rows.length > 0) {
+                for (const r of rows) {
+                  fetchedByTableId[table][String(r.id)] = r;
+                }
+              }
+            }
+
+            // Merge fetched names into identifications
+            let enriched = (response.data.identifications || []).map((it: any) => {
+              const taxonId = it.taxon_id || it.taxonId || (it.species && it.species.id) || null;
+              if (!taxonId) return it;
+              const typeRaw = (it.identificationType || it.identification_type || it.subtype || it.type || '').toString().toLowerCase();
+              const table = typeRaw.includes('plant') || typeRaw.includes('host') ? 'plant_taxonomy' : 'lepidoptera_taxonomy';
+              const row = fetchedByTableId[table] ? fetchedByTableId[table][String(taxonId)] : null;
+              if (row) {
+                return {
+                  ...it,
+                  common_name: it.common_name || it.comm_name || it.commonName || it.comname || it.display_name || row.common_name || row.comm_name || row.display_name || null,
+                  scientific_name: it.scientific_name || it.scientificName || row.scientific_name || row.sciname || row.name || null,
+                };
+              }
+              return it;
+            });
+
+            // For identifications without a taxon_id, attempt to look up taxonomy via the same search used by the upload popover
+            const namesToLookup: Record<string, { name: string; type: 'lepidoptera' | 'plant' }> = {};
+            for (const it of enriched) {
+              const taxonId = it.taxon_id || it.taxonId || (it.species && it.species.id) || null;
+              if (taxonId) continue;
+              const speciesName = (it.species && typeof it.species === 'string') ? it.species : (it.species && it.species.name ? it.species.name : null) || it.scientific_name || it.scientificName || null;
+              if (!speciesName) continue;
+              const typeRaw = (it.identificationType || it.identification_type || it.subtype || it.type || '').toString().toLowerCase();
+              const t: 'lepidoptera' | 'plant' = typeRaw.includes('plant') || typeRaw.includes('host') ? 'plant' : 'lepidoptera';
+              const key = `${t}::${speciesName}`;
+              if (!namesToLookup[key]) namesToLookup[key] = { name: speciesName, type: t };
+            }
+
+            // Perform lookups using apiClient.searchSpecies to reuse the same logic as the upload popover
+            const lookupResultsByKey: Record<string, any> = {};
+            for (const k of Object.keys(namesToLookup)) {
+              const { name, type } = namesToLookup[k];
+              try {
+                const resp = await apiClient.searchSpecies(name, type);
+                if (resp && resp.success && Array.isArray(resp.data) && resp.data.length > 0) {
+                  lookupResultsByKey[k] = resp.data[0];
+                }
+              } catch (e) {
+                // ignore lookup failure for this name
+              }
+            }
+
+            // Merge lookup results into enriched identifications
+            enriched = enriched.map((it: any) => {
+              const taxonId = it.taxon_id || it.taxonId || (it.species && it.species.id) || null;
+              if (taxonId) return it;
+              const speciesName = (it.species && typeof it.species === 'string') ? it.species : (it.species && it.species.name ? it.species.name : null) || it.scientific_name || it.scientificName || null;
+              if (!speciesName) return it;
+              const typeRaw = (it.identificationType || it.identification_type || it.subtype || it.type || '').toString().toLowerCase();
+              const t: 'lepidoptera' | 'plant' = typeRaw.includes('plant') || typeRaw.includes('host') ? 'plant' : 'lepidoptera';
+              const key = `${t}::${speciesName}`;
+              const row = lookupResultsByKey[key];
+              if (row) {
+                return {
+                  ...it,
+                  common_name: it.common_name || it.comm_name || it.commonName || it.comname || it.display_name || row.common_name || row.comm_name || row.display_name || null,
+                  scientific_name: it.scientific_name || it.scientificName || row.scientific_name || row.sciname || row.name || null,
+                  taxon_id: it.taxon_id || it.taxonId || row.id || null,
+                };
+              }
+              return it;
+            });
+
+            // Update local observation with enriched identifications
+            setLocalObservation((prev: any) => ({ ...(prev || {}), identifications: enriched }));
+          }
+        } catch (e) {
+          console.warn('Failed to enrich identifications with taxonomy rows', e);
+        }
       }
     } catch (error) {
       // Optionally handle error
@@ -145,6 +265,11 @@ export function ObservationDetailModal({
   // Suggestion State
   const [suggestSpecies, setSuggestSpecies] = useState('');
   const [suggestReason, setSuggestReason] = useState('');
+  // Suggest search & UI helpers (like UploadObservationModal)
+  const [suggestSearch, setSuggestSearch] = useState('');
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [showSuggestPopover, setShowSuggestPopover] = useState(false);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<any>(null);
   
   // Tab State
   const [activeTab, setActiveTab] = useState('comment'); 
@@ -167,6 +292,31 @@ export function ObservationDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, observation?.id]);
 
+  // When user types in the Suggest ID search input, query species suggestions
+  useEffect(() => {
+    let cancelled = false;
+    const doSearch = async () => {
+      if (!suggestSearch || suggestSearch.length === 0) {
+        setSuggestions([]);
+        return;
+      }
+      try {
+        const type = suggestType === 'lepidoptera' ? 'lepidoptera' : 'plant';
+        const resp = await apiClient.get(`/species/search?q=${encodeURIComponent(suggestSearch)}&type=${type}`, accessToken);
+        if (cancelled) return;
+        if (resp && resp.success) {
+          setSuggestions(resp.data || []);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (e) {
+        setSuggestions([]);
+      }
+    };
+    doSearch();
+    return () => { cancelled = true; };
+  }, [suggestSearch, suggestType, accessToken]);
+
   // --- Derived State: Unified Activity Feed ---
   const activityFeed = useMemo(() => {
     const comments = (localObservation.comments || []).map((c: any) => ({
@@ -176,19 +326,289 @@ export function ObservationDetailModal({
       user: { name: c.userName, avatar: c.userAvatar },
       content: c.text
     }));
-    const identifications = (localObservation.identifications || []).map((i: any) => ({
-      type: 'identification',
-      subtype: i.identificationType || (i.species === localObservation?.lepidoptera?.species ? 'lepidoptera' : 'hostPlant'),
-      id: i.id,
-      date: new Date(i.createdAt || i.created_at),
-      user: { name: i.userName, avatar: i.userAvatar },
-      species: i.species,
-      scientificName: i.scientificName,
-      verified: i.verified,
-      thumb: i.taxonThumb
-    }));
+    const identifications = (localObservation.identifications || []).map((i: any) => {
+      const votesArr = i.votes || i.identification_votes || [];
+      const voteCount = Number(i.vote_count ?? (Array.isArray(votesArr) ? votesArr.length : 0));
+      const userVoted = !!(currentUserId && Array.isArray(votesArr) && votesArr.find((v: any) => String(v.user_id || v.userId || v.user || '') === String(currentUserId)));
+      const subtype = i.identificationType || i.identification_type || (i.species === localObservation?.lepidoptera?.species ? 'lepidoptera' : 'hostPlant');
+      return {
+        type: 'identification',
+        subtype,
+        // include the suggester's id so the UI can hide Agree for own suggestions
+        userId: i.user_id || i.user?.id || i.userId || null,
+        id: i.id,
+        date: new Date(i.createdAt || i.created_at),
+        user: { name: i.userName || i.user_name || i.userName, avatar: i.userAvatar || i.user_avatar || null },
+        species: i.species,
+        // Prefer an explicit common name when available (from taxonomy table).
+        // Accept several possible column names that may be returned from different extracts:
+        // `common_name`, `comm_name`, `commonName`, `comname`, `display_name`.
+        // Also accept `species` as an object (some responses nest taxonomy under `species`).
+        commonName:
+          i.common_name || i.comm_name || i.commonName || i.comname || i.display_name ||
+          (i.species && typeof i.species === 'object' ? (i.species.common_name || i.species.display_name || i.species.comname || i.species.commonName) : null) || null,
+        // Robust scientific name extraction: prefer dedicated fields, then look inside `species` object
+        scientificName:
+          i.scientificName || i.scientific_name ||
+          (i.species && typeof i.species === 'object' ? (i.species.scientific_name || i.species.sciname || i.species.name) : null) || null,
+        caption: i.caption || i.reason || i.explanation || null,
+        verified: i.verified || i.is_verified || false,
+        thumb: i.taxonThumb || i.taxon_thumb || null,
+        votes: votesArr,
+        voteCount,
+        userVoted,
+      };
+    });
     return [...comments, ...identifications].sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [localObservation]);
+  }, [localObservation, currentUserId]);
+
+  // --- Derived State: Community Taxon Candidates ---
+  const communityCandidates = useMemo(() => {
+    const ids = localObservation.identifications || [];
+    // Group by (type + species) to separate Lepidoptera vs Host Plant
+    const map: Record<string, {
+      type: 'lepidoptera' | 'hostPlant';
+      species: string;
+      scientificName?: string;
+      count: number;
+      identificationIds: string[];
+      voters: Set<string>;
+    }> = {};
+
+    // Global voter sets per type to compute threshold
+    const globalVotersByType: Record<string, Set<string>> = { lepidoptera: new Set(), hostPlant: new Set() };
+
+    for (const i of ids) {
+      const species = (i.species || i.scientific_name || i.scientificName || '').toString();
+      if (!species) continue;
+      // Determine identification type
+      const typeRaw = (i.identificationType || i.identification_type || i.subtype || i.type || '').toString().toLowerCase();
+      const type: 'lepidoptera' | 'hostPlant' = typeRaw.includes('plant') || typeRaw.includes('host') ? 'hostPlant' : 'lepidoptera';
+      const key = `${type}::${species}`;
+
+      // Collect voter ids for this identification
+      let votersForId: string[] = [];
+      if (Array.isArray(i.votes)) {
+        votersForId = i.votes.map((v: any) => String(v.user_id || v.userId || v.user || v));
+      } else if (Array.isArray(i.identification_votes)) {
+        votersForId = i.identification_votes.map((v: any) => String(v.user_id || v.userId || v.user || v));
+      } else if (typeof i.vote_count !== 'undefined') {
+        // no per-user votes available; will fallback to counts
+        votersForId = [];
+      }
+
+      const count = votersForId.length > 0 ? votersForId.length : Number(i.vote_count ?? 1);
+
+      if (!map[key]) map[key] = { type, species, scientificName: i.scientific_name || i.scientificName || '', count: 0, identificationIds: [], voters: new Set() };
+      map[key].count += Number(count) || 0;
+      if (i.id) map[key].identificationIds.push(i.id);
+      if (votersForId.length > 0) {
+        for (const uid of votersForId) {
+          if (uid) map[key].voters.add(uid);
+          globalVotersByType[type].add(uid);
+        }
+      } else {
+        // fallback: if no voter list, we approximate by adding placeholders (will affect threshold calculation)
+        // add nothing to voter sets but keep count value
+      }
+      if (!map[key].scientificName && (i.scientific_name || i.scientificName)) map[key].scientificName = i.scientific_name || i.scientificName;
+    }
+
+    const arr = Object.values(map).map(c => ({
+      ...c,
+      // ensure count reflects unique voters if available
+      count: c.voters.size > 0 ? c.voters.size : c.count
+    })).sort((a, b) => b.count - a.count);
+
+    // Determine community taxon following rules:
+    // - Require at least 2 identifications in total for the type
+    // - Check for >= 2/3 majority at species level
+    // - If no 2/3 species majority, "walk up" to genus, family (if available) and check for unanimity
+
+    // Helper to extract taxonomic ranks from an identification
+    const getRanks = (it: any) => {
+      const scientific = (it.scientific_name || it.scientificName || '').toString();
+      const genus = it.genus || (scientific ? scientific.split(' ')[0] : '') || '';
+      const family = it.family || it.family_name || '';
+      return { scientific, genus, family };
+    };
+
+    // Build per-type lists of ident records (one per identification row)
+    const perTypeIds: Record<string, any[]> = { lepidoptera: [], hostPlant: [] };
+    for (const i of ids) {
+      const typeRaw = (i.identificationType || i.identification_type || i.subtype || i.type || '').toString().toLowerCase();
+      const type: 'lepidoptera' | 'hostPlant' = typeRaw.includes('plant') || typeRaw.includes('host') ? 'hostPlant' : 'lepidoptera';
+      perTypeIds[type].push(i);
+    }
+
+    const communityByType: Record<string, any> = { lepidoptera: null, hostPlant: null };
+
+    for (const t of ['lepidoptera', 'hostPlant']) {
+      const list = perTypeIds[t];
+      const totalIds = list.length;
+      if (totalIds < 2) {
+        communityByType[t] = null;
+        continue;
+      }
+
+      // Species level majority (2/3)
+      // Build species counts
+      const speciesCounts: Record<string, number> = {};
+      for (const it of list) {
+        const sp = (it.species || it.scientific_name || it.scientificName || '').toString();
+        if (!sp) continue;
+        speciesCounts[sp] = (speciesCounts[sp] || 0) + 1;
+      }
+      const entries = Object.entries(speciesCounts).sort((a, b) => b[1] - a[1]);
+      const topSpecies = entries.length > 0 ? entries[0][0] : null;
+      const topSpeciesCount = entries.length > 0 ? entries[0][1] : 0;
+      const threshold = Math.ceil((2 / 3) * totalIds);
+      if (topSpecies && topSpeciesCount >= threshold) {
+        communityByType[t] = { level: 'species', name: topSpecies, count: topSpeciesCount, total: totalIds };
+        continue;
+      }
+
+      // No species majority: walk up to genus and family and check for unanimity
+      const genera = new Set<string>();
+      const families = new Set<string>();
+      for (const it of list) {
+        const r = getRanks(it);
+        if (r.genus) genera.add(r.genus);
+        if (r.family) families.add(r.family);
+      }
+
+      if (genera.size === 1) {
+        const genusName = Array.from(genera)[0];
+        communityByType[t] = { level: 'genus', name: genusName, count: totalIds, total: totalIds };
+        continue;
+      }
+      if (families.size === 1) {
+        const familyName = Array.from(families)[0];
+        communityByType[t] = { level: 'family', name: familyName, count: totalIds, total: totalIds };
+        continue;
+      }
+
+      // No community taxon found
+      communityByType[t] = null;
+    }
+
+    return { candidates: arr, globalVotersByType, communityByType };
+  }, [localObservation.identifications]);
+
+  // Show top candidate filtered by selected suggestType (which is shared with Suggest ID toggle)
+  const candidatesForType = communityCandidates && communityCandidates.candidates ? communityCandidates.candidates.filter((c: any) => c.type === suggestType) : [];
+  const topCommunityTaxon = candidatesForType.length > 0 ? candidatesForType[0] : null;
+  // total identifications for this type (sum of supporting IDs)
+  const totalIdentificationsForType = candidatesForType.reduce((s: number, c: any) => s + (Number(c.count) || 0), 0);
+  // threshold by 2/3 of identifications (as per iNaturalist rule)
+  const thresholdByIds = totalIdentificationsForType > 0 ? Math.ceil((2 / 3) * totalIdentificationsForType) : 1;
+  // Community taxon computed by rules (species 2/3 majority OR unanimous genus/family)
+  const communityForType = communityCandidates?.communityByType ? communityCandidates.communityByType[suggestType] : null;
+  const isTopVerified = !!communityForType; // community established according to rules
+  // Prepare segments for display bar (percent widths)
+  const voteSegments = candidatesForType.map((c: any, idx: number) => ({
+    ...c,
+    percent: totalIdentificationsForType > 0 ? ((Number(c.count || 0) / totalIdentificationsForType) * 100) : 0,
+    colorIndex: idx,
+  }));
+  const userAlreadyVotedTop = topCommunityTaxon && currentUserId ? (topCommunityTaxon.voters ? topCommunityTaxon.voters.has(String(currentUserId)) : false) : false;
+
+  const handleAgreeIdentification = async (identificationId: string) => {
+    if (!accessToken) {
+      toast.error('Please sign in to agree');
+      return;
+    }
+    try {
+      const resp = await apiClient.post('/agree-identification', { identification_id: identificationId }, accessToken);
+      if (resp && resp.success) {
+        toast.success('Agreed!');
+        // Refresh observation and comments
+        await fetchObservationDetails();
+        await fetchCommentsFromSupabase();
+        // Also add a local identification-like activity so the agree appears in the Activity feed
+        try {
+          if (currentUserId) {
+            // find the identification being agreed to
+            const ident = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId));
+            const speciesName = ident?.species || ident?.scientific_name || 'suggested ID';
+
+            // fetch current user's profile to show name/avatar
+            let profile: any = null;
+            try {
+              const { data: profileData, error: profileError } = await supabase
+                .from('profiles')
+                .select('id, username, name, avatar_url')
+                .eq('id', currentUserId)
+                .single();
+              if (!profileError && profileData) profile = profileData;
+            } catch (e) {
+              // ignore profile fetch error
+            }
+
+            // Create a lightweight local identification object representing the agree action
+            const localId = `local-agree-${Date.now()}`;
+            const localIdentification: any = {
+              id: localId,
+              species: speciesName,
+              // populate commonName and scientificName for the optimistic local agree entry
+              commonName: ident?.common_name || ident?.comm_name || ident?.commonName || ident?.display_name || (ident?.species && typeof ident.species === 'object' ? (ident.species.common_name || ident.species.display_name) : null) || null,
+              scientific_name: ident?.scientific_name || ident?.scientificName || (ident?.species && typeof ident.species === 'object' ? (ident.species.scientific_name || ident.species.sciname || ident.species.name) : null) || null,
+              identification_type: ident?.identification_type || ident?.identificationType || (ident?.subtype === 'hostPlant' ? 'hostPlant' : 'lepidoptera'),
+              user_id: currentUserId,
+              userId: currentUserId,
+              userName: profile?.username || profile?.name || 'You',
+              userAvatar: profile?.avatar_url || null,
+              created_at: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+              votes: [{ id: `local-vote-${Date.now()}`, identification_id: localId, user_id: currentUserId }],
+              identification_votes: [{ id: `local-vote-${Date.now()}`, identification_id: localId, user_id: currentUserId }],
+              vote_count: (ident?.vote_count ? Number(ident.vote_count) + 1 : (Array.isArray(ident?.votes) ? ident.votes.length + 1 : 1)),
+            };
+
+            // Append the local identification activity
+            setLocalObservation((prev: any) => ({ ...(prev || {}), identifications: [ ...(prev?.identifications || []), localIdentification ] }));
+
+            // Also update the original identification's vote_count and votes if present so counts update visually
+            try {
+              setLocalObservation((prev: any) => {
+                if (!prev) return prev;
+                const ids = (prev.identifications || []).map((it: any) => {
+                  if (String(it.id) === String(identificationId)) {
+                    const existingVotes = Array.isArray(it.votes) ? it.votes.slice() : (Array.isArray(it.identification_votes) ? it.identification_votes.slice() : []);
+                    // add current user to votes if not present
+                    const already = existingVotes.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
+                    if (!already) {
+                      existingVotes.push({ id: `local-vote-${Date.now()}`, identification_id: it.id, user_id: currentUserId });
+                    }
+                    return {
+                      ...it,
+                      votes: existingVotes,
+                      identification_votes: existingVotes,
+                      vote_count: (Number(it.vote_count || existingVotes.length) || 0) + (already ? 0 : 1),
+                      userVoted: true,
+                    };
+                  }
+                  return it;
+                });
+                return { ...prev, identifications: ids };
+              });
+            } catch (e) {
+              // ignore update failure
+            }
+          }
+        } catch (e) {
+          // non-fatal if local activity can't be appended
+          console.warn('Failed to append local agree activity', e);
+        }
+
+        onUpdate();
+      } else {
+        toast.error(resp?.error || 'Failed to agree');
+      }
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to agree');
+    }
+  };
 
   const handleAddComment = async () => {
     if (!comment.trim() || !accessToken) return;
@@ -385,6 +805,85 @@ export function ObservationDetailModal({
           </div>
 
           {/* --- 4. Activity Feed --- */}
+          {/* --- Community Taxon (community consensus) --- */}
+          {/* Community Taxon Type Toggle (same style as Suggest ID) */}
+          <div className="flex justify-center mb-4">
+            <div className="inline-flex rounded-md shadow-sm" role="group">
+              <button
+                type="button"
+                className={`px-4 py-2 text-sm font-medium border rounded-l-lg ${suggestType === 'lepidoptera' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setSuggestType('lepidoptera')}
+              >
+                Lepidoptera
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-2 text-sm font-medium border rounded-r-lg ${suggestType === 'hostPlant' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                onClick={() => setSuggestType('hostPlant')}
+              >
+                Host Plant
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-4 p-4 border rounded-lg bg-gray-50">
+            {communityForType ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs font-semibold text-gray-500">Community Taxon</div>
+                    {isTopVerified && <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">Verified</span>}
+                  </div>
+                  {communityForType.level === 'species' && topCommunityTaxon ? (
+                    <>
+                      <div className="text-lg font-bold text-gray-900 mt-1">{topCommunityTaxon.species}</div>
+                      {topCommunityTaxon.scientificName && (
+                        <div className="text-xs text-gray-500 italic">{topCommunityTaxon.scientificName}</div>
+                      )}
+                      <div className="text-sm text-gray-600 mt-2">{topCommunityTaxon.count} vote(s)</div>
+                      <div className="mt-3">
+                        <div className="w-full bg-gray-200 rounded h-6 relative overflow-hidden">
+                          {/* vote segments */}
+                          <div className="flex h-full w-full">
+                            {voteSegments.length > 0 ? (
+                              voteSegments.map((seg: any, i: number) => (
+                                <div key={seg.species + i} style={{ width: `${seg.percent}%` }} className={`h-full ${i % 2 === 0 ? 'bg-amber-400' : 'bg-green-400'}`} title={`${seg.species}: ${seg.count}`} />
+                              ))
+                            ) : (
+                              <div className="h-full w-full bg-gray-300" />
+                            )}
+                          </div>
+                          {/* two-thirds marker */}
+                          <div style={{ position: 'absolute', left: `${(2 / 3) * 100}%`, top: 0, bottom: 0, width: 2, background: 'rgba(0,0,0,0.5)' }} />
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
+                          <div>{totalIdentificationsForType} total ID(s)</div>
+                          <div>2/3 = {thresholdByIds} vote(s)</div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    // Genus or family level consensus
+                    <>
+                      <div className="text-lg font-bold text-gray-900 mt-1">{communityForType.name}</div>
+                      <div className="text-xs text-gray-500 italic">Consensus at {communityForType.level} level</div>
+                      <div className="text-sm text-gray-600 mt-2">{communityForType.count} supporting ID(s)</div>
+                    </>
+                  )}
+                </div>
+                {/* Community Agree button removed — consensus is shown but agreeing happens on individual suggestions */}
+              </div>
+            ) : (
+              <div>
+                <div className="text-xs font-semibold text-gray-500">Community Taxon</div>
+                <div className="text-lg font-bold text-gray-900 mt-1">Not yet identified</div>
+                <div className="text-xs text-gray-500 italic">No suggestions yet for {suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Host Plant'}</div>
+                <div className="text-sm font-medium text-gray-700 mt-2">0 vote(s)</div>
+                <div className="text-xs text-gray-500">Consensus threshold: {thresholdByIds} / {totalIdentificationsForType} (2/3)</div>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-4">
             <h3 className="text-sm font-bold text-gray-900">Activity</h3>
             <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
@@ -400,23 +899,48 @@ export function ObservationDetailModal({
                     
                     <div className="flex-1 space-y-1">
                       <div className="flex items-baseline justify-between">
-                        <span className="font-semibold text-gray-900">{item.user.name}</span>
+                        <span className="font-semibold text-gray-900 whitespace-nowrap">
+                          {(() => {
+                            const displayName = item.user?.name || item.user?.username || item.userName || 'User';
+                            if (item.type === 'identification') {
+                              const target = item.subtype === 'hostPlant' ? 'Host Plant' : 'Lepidoptera';
+                              return `${displayName} suggested an ID for ${target}`;
+                            }
+                            if (item.type === 'comment') {
+                              return `${displayName} commented`;
+                            }
+                            return displayName;
+                          })()}
+                        </span>
                         <span className="text-xs text-gray-400">{item.date.toLocaleDateString()}</span>
                       </div>
                       
                       {item.type === 'identification' ? (
                         <div className="bg-amber-50/50 p-3 rounded-lg border border-amber-100 text-gray-800">
-                          <span className="text-amber-700 font-medium">Suggested ID:</span>
-                          <div className="font-bold mt-1 text-lg flex items-center gap-2">
-                             {item.thumb && <img src={item.thumb} className="w-8 h-8 rounded object-cover" alt="Taxon thumbnail" />}
-                             {item.species} 
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-amber-700 font-medium">Suggested ID</div>
+                              <div className="font-bold mt-1 text-lg flex items-center gap-2">
+                                {item.thumb && <img src={item.thumb} className="w-8 h-8 rounded object-cover" alt="Taxon thumbnail" />}
+                                {item.commonName || ''}
+                              </div>
+                              <div className="text-xs text-gray-500 italic">{item.scientificName}</div>
+                              {item.caption && (
+                                <div className="text-sm text-gray-700 mt-2">{item.caption}</div>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-gray-500 mb-2">{item.subtype === 'hostPlant' || item.type === 'hostPlant' ? 'Host Plant' : 'Lepidoptera'}</div>
+                              {item.userId !== currentUserId && (
+                                <Button size="sm" onClick={() => handleAgreeIdentification(item.id)} disabled={!accessToken || item.userVoted}>
+                                  {item.userVoted ? 'Agreed' : 'Agree'}
+                                </Button>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 italic">{item.scientificName}</div>
                         </div>
                       ) : (
-                        <div className="text-gray-700">
-                          {item.content}
-                        </div>
+                        <div className="text-gray-700">{item.content}</div>
                       )}
                     </div>
                   </div>
@@ -472,12 +996,45 @@ export function ObservationDetailModal({
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <Input 
-                    placeholder={`Species name (${suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Host Plant'})...`}
-                    value={suggestSpecies}
-                    onChange={(e) => setSuggestSpecies(e.target.value)}
+                <div className="space-y-3 relative">
+                  <Input
+                    placeholder={`Search species (${suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Host Plant'})...`}
+                    value={selectedSuggestion ? (selectedSuggestion.common_name || selectedSuggestion.name || suggestSearch) : suggestSearch}
+                    onChange={(e) => {
+                      setSuggestSearch(e.target.value);
+                      setSelectedSuggestion(null);
+                      setShowSuggestPopover(true);
+                    }}
+                    onFocus={() => setShowSuggestPopover(true)}
                   />
+
+                  {showSuggestPopover && suggestions.length > 0 && (
+                    <div className="absolute z-20 w-full bg-white border mt-1 rounded shadow max-h-60 overflow-auto">
+                      {suggestions.map((s: any, i: number) => (
+                        <div
+                          key={s.id || `${s.name}-${i}`}
+                          className="px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                          onClick={() => {
+                            setSelectedSuggestion(s);
+                            // prefer common_name or name fields
+                            const name = s.common_name || s.name || s.comname || s.display_name || '';
+                            setSuggestSearch(name);
+                            setSuggestSpecies(name);
+                            setShowSuggestPopover(false);
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            {s.thumbnail && <img src={s.thumbnail} alt="t" className="w-8 h-8 object-cover rounded" />}
+                            <div>
+                              <div className="font-medium text-sm">{s.common_name || s.name || s.comname || s.display_name}</div>
+                              <div className="text-xs text-gray-500">{s.scientific_name || s.sciname || ''}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   <Textarea 
                     placeholder="Tell us why..." 
                     value={suggestReason}
@@ -485,8 +1042,56 @@ export function ObservationDetailModal({
                   />
                   <Button 
                     className={`w-full ${suggestType === 'lepidoptera' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-green-600 hover:bg-green-700'}`}
-                    onClick={handleSuggestID}
-                    disabled={!accessToken || !suggestSpecies.trim()}
+                    onClick={async () => {
+                      // Build the payload and call suggest-identification endpoint
+                      if (!accessToken) {
+                        toast.error('Please sign in to suggest an ID');
+                        return;
+                      }
+                      const speciesName = selectedSuggestion ? (selectedSuggestion.common_name || selectedSuggestion.name || selectedSuggestion.display_name) : (suggestSearch || suggestSpecies);
+                      if (!speciesName || speciesName.trim().length === 0) {
+                        toast.error('Please choose a species or type a name');
+                        return;
+                      }
+                      const payload: any = {
+                        observation_id: localObservation.id,
+                        species: speciesName,
+                        identification_type: suggestType,
+                        // send reason and caption to support both server expectations
+                        reason: suggestReason || null,
+                        caption: suggestReason || null,
+                      };
+                      if (selectedSuggestion) {
+                        payload.scientific_name = selectedSuggestion.scientific_name || selectedSuggestion.sciname || null;
+                        if (selectedSuggestion.id) payload.taxon_id = selectedSuggestion.id;
+                      }
+
+                      try {
+                        // Debug: log payload being sent so we can confirm caption is present
+                        // (avoid logging tokens)
+                        // eslint-disable-next-line no-console
+                        console.debug('Suggest-identification payload ->', { observation_id: payload.observation_id, species: payload.species, captionProvided: !!payload.caption });
+                        const resp = await apiClient.post('/suggest-identification', payload, accessToken);
+                        if (resp && resp.success) {
+                          toast.success('Suggestion submitted');
+                          setSuggestSearch('');
+                          setSuggestSpecies('');
+                          setSuggestReason('');
+                          setSelectedSuggestion(null);
+                          setSuggestions([]);
+                          setShowSuggestPopover(false);
+                          // Refresh the observation so the new identification appears in Activity
+                          await fetchObservationDetails();
+                          await fetchCommentsFromSupabase();
+                          onUpdate();
+                        } else {
+                          toast.error(resp?.error || 'Failed to submit suggestion');
+                        }
+                      } catch (e: any) {
+                        toast.error(e?.message || 'Failed to submit suggestion');
+                      }
+                    }}
+                    disabled={!accessToken || (!suggestSearch && !selectedSuggestion && !suggestSpecies)}
                   >
                     Suggest {suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Plant'} ID
                   </Button>

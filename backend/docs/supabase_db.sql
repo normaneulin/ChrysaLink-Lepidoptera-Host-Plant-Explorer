@@ -23,6 +23,15 @@ CREATE TABLE public.comments (
   CONSTRAINT comments_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.observations(id),
   CONSTRAINT comments_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.identification_votes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  identification_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT identification_votes_pkey PRIMARY KEY (id),
+  CONSTRAINT identification_votes_identification_id_fkey FOREIGN KEY (identification_id) REFERENCES public.identifications(id),
+  CONSTRAINT identification_votes_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
 CREATE TABLE public.identifications (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   observation_id uuid NOT NULL,
@@ -38,6 +47,7 @@ CREATE TABLE public.identifications (
   verified_by_user_id uuid,
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  identification_type text NOT NULL DEFAULT 'lepidoptera'::text CHECK (identification_type = ANY (ARRAY['lepidoptera'::text, 'hostPlant'::text])),
   CONSTRAINT identifications_pkey PRIMARY KEY (id),
   CONSTRAINT identifications_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.observations(id),
   CONSTRAINT identifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
@@ -198,4 +208,11 @@ CREATE TABLE public.user_achievements (
   CONSTRAINT user_achievements_pkey PRIMARY KEY (id),
   CONSTRAINT user_achievements_achievement_id_fkey FOREIGN KEY (achievement_id) REFERENCES public.achievements(id),
   CONSTRAINT user_achievements_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.vision_cache (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  image_hash text NOT NULL,
+  result jsonb NOT NULL,
+  created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT vision_cache_pkey PRIMARY KEY (id)
 );

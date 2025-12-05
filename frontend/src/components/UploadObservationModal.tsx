@@ -200,6 +200,87 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
         throw new Error(response.error || 'Failed to create observation');
       }
 
+      // If the user provided identifications during upload, create identification rows
+      // so they appear in the Activity feed and other users can agree.
+      const createdObs: any = response.data;
+      try {
+        const obsId = createdObs?.id;
+        if (obsId) {
+          // Helper to suggest an identification with fallback to Supabase insert when no accessToken
+          const suggestWithFallback = async (payload: any) => {
+            // First try edge function when accessToken is present
+            if (accessToken) {
+              try {
+                // Debug: log payload presence of caption/reason before calling edge function
+                // eslint-disable-next-line no-console
+                console.debug('Uploading observation - suggestWithFallback payload ->', { observation_id: payload.observation_id, species: payload.species, captionProvided: !!(payload.reason || payload.caption) });
+                const resp = await apiClient.post('/suggest-identification', payload, accessToken);
+                if (resp && resp.success) return resp;
+                // If the function call failed, fall through to Supabase fallback
+                console.warn('Edge suggest-identification failed, falling back to Supabase:', resp?.error);
+              } catch (err) {
+                console.warn('Edge suggest-identification request error, falling back to Supabase:', err);
+              }
+            }
+
+            // Supabase fallback: use anon client to read current session user and insert directly
+            try {
+              const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
+              const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+              const sb = createClient(supabaseUrl, supabaseAnonKey);
+
+              const { data: userData, error: userErr } = await sb.auth.getUser();
+              const user = userData?.user;
+              if (!user?.id) {
+                console.warn('No authenticated session for Supabase fallback — skipping identification insert');
+                return null;
+              }
+
+              const identPayload: any = {
+                observation_id: payload.observation_id,
+                user_id: user.id,
+                species: payload.species,
+                scientific_name: payload.scientific_name || null,
+                // include caption/reason if provided so "Tell us why" is persisted
+                caption: payload.reason || payload.caption || null,
+                identification_type: payload.identification_type || payload.identificationType || 'lepidoptera',
+                is_auto_suggested: false,
+              };
+
+              const { data: identData, error: identErr } = await sb.from('identifications').insert([identPayload]).select().single();
+              if (identErr || !identData) {
+                console.warn('Supabase identifications insert error:', identErr);
+                return null;
+              }
+
+              // Add initial vote for the suggester
+              try {
+                await sb.from('identification_votes').insert([{ identification_id: identData.id, user_id: user.id }]);
+              } catch (voteErr) {
+                console.warn('Failed to insert initial identification vote in fallback:', voteErr);
+              }
+
+              return { success: true, data: identData };
+            } catch (fallbackErr) {
+              console.warn('Identification fallback failed:', fallbackErr);
+              return null;
+            }
+          };
+
+          // Lepidoptera identification
+          if (lepidopteraIdentification && lepidopteraIdentification.trim().length > 0) {
+            await suggestWithFallback({ observation_id: obsId, species: lepidopteraIdentification, identification_type: 'lepidoptera', scientific_name: lepidopteraSpecies || null });
+          }
+
+          // Host plant identification
+          if (plantIdentification && plantIdentification.trim().length > 0) {
+            await suggestWithFallback({ observation_id: obsId, species: plantIdentification, identification_type: 'hostPlant', scientific_name: hostPlantSpecies || null });
+          }
+        }
+      } catch (e) {
+        console.warn('Error while creating initial identifications:', e);
+      }
+
       toast.success('Observation uploaded successfully!');
       onSuccess();
       onClose();

@@ -28,10 +28,13 @@ class FrontendApiClient {
   ): Promise<ApiResponse<T>> {
     const { method = "GET", body, accessToken } = options;
 
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
     const headers: HeadersInit = {
       "Content-Type": "application/json",
       // Add Supabase anon key for all requests to edge functions
-      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      "Authorization": `Bearer ${anonKey}`,
+      // Also include the anon key as the apikey header which some Supabase endpoints expect
+      "apikey": anonKey,
     };
 
     // Override with user access token if provided
@@ -40,7 +43,10 @@ class FrontendApiClient {
     }
 
     try {
-      const fetchUrl = `${BACKEND_URL}${endpoint}`;
+      // Normalize URL joining to avoid duplicated or missing slashes
+      const base = BACKEND_URL.replace(/\/$/, '');
+      const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+      const fetchUrl = `${base}${path}`;
       // Debug: log the outgoing function URL and whether an access token is provided
       // (Do not log the token itself to avoid leaking secrets)
       // eslint-disable-next-line no-console
@@ -52,22 +58,169 @@ class FrontendApiClient {
         body: body ? JSON.stringify(body) : undefined,
       });
 
-      const data = await response.json();
+      // Try parsing JSON safely so that non-JSON responses (502/502 HTML pages) are still logged
+      let parsed: any = null;
+      try {
+        parsed = await response.json();
+      } catch (jsonErr) {
+        const text = await response.text().catch(() => '<<unable to read body>>');
+        // eslint-disable-next-line no-console
+        console.warn('Non-JSON response from API client', { url: fetchUrl, status: response.status, bodyPreview: text.slice ? text.slice(0, 1000) : text });
+        parsed = { error: `Non-JSON response (HTTP ${response.status})`, raw: text };
+      }
 
       if (!response.ok) {
+        // If the edge function returned 401 for a species search, fall back to local Supabase search
+        if (response.status === 401 && endpoint.startsWith('/species/search')) {
+          const qs = endpoint.includes('?') ? endpoint.split('?')[1] : '';
+          const params = new URLSearchParams(qs);
+          const q = params.get('q') || '';
+          const typeParam = params.get('type');
+          const type = typeParam === 'plant' ? 'plant' : 'lepidoptera';
+          // Log fallback so it's visible in browser devtools
+          // eslint-disable-next-line no-console
+          console.warn('API client: edge function returned 401 for species search; falling back to local Supabase search', { endpoint, q, type });
+          // Return the same shape as other ApiResponse
+          return await this.searchSpecies(q, type);
+        }
+
         return {
           success: false,
-          error: data.error || data.message || `HTTP ${response.status}`,
+          error: parsed?.error || parsed?.message || `HTTP ${response.status}`,
           statusCode: response.status,
         };
       }
 
       return {
         success: true,
-        data: data.data,
-        message: data.message,
+        data: parsed?.data ?? parsed,
+        message: parsed?.message,
       };
     } catch (error: any) {
+      // Network error or function host unreachable. Attempt local Supabase fallbacks for known endpoints.
+      try {
+        // If caller requested a species search, use the built-in fallback searchSpecies method
+        // so the UI still works when edge functions are down.
+        if (endpoint.startsWith('/species/search')) {
+          const qs = endpoint.includes('?') ? endpoint.split('?')[1] : '';
+          const params = new URLSearchParams(qs);
+          const q = params.get('q') || '';
+          const typeParam = params.get('type');
+          const type = typeParam === 'plant' ? 'plant' : 'lepidoptera';
+          // Log fallback so it's visible in browser devtools
+          // eslint-disable-next-line no-console
+          console.warn('API client: falling back to local Supabase search for', { endpoint, q, type });
+          return await this.searchSpecies(q, type);
+        }
+        // If caller requested a single observation, fallback to direct Supabase query
+        if (endpoint.startsWith('/observations/') && options.method === 'GET') {
+          const obsId = endpoint.split('/')[2];
+          if (obsId) {
+            const { data, error } = await supabase
+              .from('observations')
+              .select(`*, lepidoptera:lepidoptera_taxonomy(scientific_name, common_name, family), plant:plant_taxonomy(scientific_name, common_name, family)`)
+              .eq('id', obsId)
+              .single();
+            if (error) throw error;
+            // Fetch images
+            const { data: images } = await supabase
+              .from('observation_images')
+              .select('observation_id, image_url, image_type')
+              .eq('observation_id', obsId);
+            const lepImg = images?.find((i: any) => i.image_type === 'lepidoptera');
+            const plantImg = images?.find((i: any) => i.image_type === 'plant');
+
+            // Fetch comments
+            const { data: commentsData } = await supabase
+              .from('comments')
+              .select('id, text, created_at, user_id')
+              .eq('observation_id', obsId)
+              .order('created_at', { ascending: true });
+
+            const userIds = Array.from(new Set((commentsData || []).map((c: any) => c.user_id).filter(Boolean)));
+            let profilesMap: Record<string, any> = {};
+            if (userIds.length > 0) {
+              const { data: profilesData } = await supabase
+                .from('profiles')
+                .select('id, username, name, avatar_url')
+                .in('id', userIds);
+              if (profilesData) profilesData.forEach((p: any) => profilesMap[p.id] = p);
+            }
+
+            const formattedComments = (commentsData || []).map((c: any) => ({
+              id: c.id,
+              text: c.text,
+              createdAt: c.created_at,
+              userId: c.user_id,
+              userName: profilesMap[c.user_id]?.username || profilesMap[c.user_id]?.name || 'User',
+              userAvatar: profilesMap[c.user_id]?.avatar_url || null,
+            }));
+
+            // Fetch identifications and votes so suggested IDs appear in Activity when functions are down
+            const { data: identsData } = await supabase
+              .from('identifications')
+              .select('*')
+              .eq('observation_id', obsId)
+              .order('created_at', { ascending: true });
+
+            let idProfilesMap: Record<string, any> = {};
+            let identificationVotesMap: Record<string, any[]> = {};
+            if (identsData && identsData.length > 0) {
+              const idUserIds = Array.from(new Set(identsData.map((it: any) => it.user_id).filter(Boolean)));
+              if (idUserIds.length > 0) {
+                const { data: idProfiles } = await supabase
+                  .from('profiles')
+                  .select('id, username, name, avatar_url')
+                  .in('id', idUserIds);
+                if (idProfiles) idProfiles.forEach((p: any) => idProfilesMap[p.id] = p);
+              }
+
+              const identificationIds = identsData.map((it: any) => it.id).filter(Boolean);
+              if (identificationIds.length > 0) {
+                const { data: votes } = await supabase
+                  .from('identification_votes')
+                  .select('id, identification_id, user_id, created_at')
+                  .in('identification_id', identificationIds);
+                if (votes) {
+                  for (const v of votes) {
+                    identificationVotesMap[v.identification_id] = identificationVotesMap[v.identification_id] || [];
+                    identificationVotesMap[v.identification_id].push(v);
+                  }
+                }
+              }
+            }
+
+            const enriched = {
+              ...data,
+              lepidoptera_image_url: lepImg ? lepImg.image_url : null,
+              plant_image_url: plantImg ? plantImg.image_url : null,
+              image_url: lepImg ? lepImg.image_url : (plantImg ? plantImg.image_url : null),
+              comments: formattedComments,
+              identifications: (identsData || []).map((it: any) => ({
+                id: it.id,
+                observation_id: it.observation_id,
+                user_id: it.user_id,
+                userName: idProfilesMap[it.user_id]?.username || idProfilesMap[it.user_id]?.name || null,
+                userAvatar: idProfilesMap[it.user_id]?.avatar_url || null,
+                species: it.species,
+                scientific_name: it.scientific_name,
+                identification_type: it.identification_type,
+                is_verified: it.is_verified,
+                created_at: it.created_at,
+                createdAt: it.created_at,
+                identification_votes: identificationVotesMap[it.id] || [],
+                vote_count: (identificationVotesMap[it.id] || []).length,
+              })),
+            } as any;
+
+            return { success: true, data: enriched };
+          }
+        }
+      } catch (fallbackErr) {
+        // continue to return original network error below
+        console.warn('Fallback Supabase query failed:', fallbackErr);
+      }
+
       return {
         success: false,
         error: error.message || "Network error",

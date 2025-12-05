@@ -169,8 +169,8 @@ BEGIN
     SELECT a.id, a.name, a.points_reward
     FROM achievements a, user_stats
     WHERE 
-      -- Not already unlocked
-      a.id NOT IN (SELECT achievement_id FROM user_achievements WHERE user_id = p_user_id)
+      -- Not already unlocked (qualify column to avoid PL/pgSQL variable ambiguity)
+      a.id NOT IN (SELECT ua2.achievement_id FROM user_achievements ua2 WHERE ua2.user_id = p_user_id)
       -- And meets requirement
       AND (
         (a.requirement_type = 'observations_count' AND user_stats.obs_count >= a.requirement_value)
@@ -179,7 +179,7 @@ BEGIN
         OR (a.requirement_type = 'rating_threshold' AND user_stats.total_rating >= a.requirement_value)
       )
   )
-  SELECT ua.id, ua.name, ua.points_reward FROM unlockable_achievements ua;
+  SELECT ua.id AS achievement_id, ua.name AS achievement_name, ua.points_reward AS points_reward FROM unlockable_achievements ua;
 END;
 $$ LANGUAGE plpgsql;
 

@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { handleObservationGet } from './src/routes/observation.ts';
+import { handleObservationComments } from './src/routes/comments.ts';
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
@@ -255,6 +257,150 @@ Deno.serve(async (req) => {
     }
   }
 
+  // --- Suggest Identification ---
+  if (path === '/suggest-identification' && req.method === 'POST') {
+    try {
+      const body = await req.json();
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
+      }
+      const token = authHeader.replace('Bearer ', '');
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      if (userError || !user) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid token' }), { status: 401, headers });
+      }
+
+      // Basic validation
+      // Debug: log incoming body keys to help diagnose missing caption issues
+      try {
+        // Avoid logging sensitive auth headers/token
+        console.log('suggest-identification: received body keys ->', Object.keys(body || {}));
+        // Also log whether caption/reason fields are present and their lengths
+        const hasCaption = typeof body.caption !== 'undefined' && body.caption !== null;
+        const hasReason = typeof body.reason !== 'undefined' && body.reason !== null;
+        console.log('suggest-identification: caption present=', hasCaption, 'reason present=', hasReason, 'captionLength=', hasCaption && body.caption ? String(body.caption).length : 0, 'reasonLength=', hasReason && body.reason ? String(body.reason).length : 0);
+      } catch (logErr) {
+        console.warn('Failed to log suggest-identification body debug info', logErr?.message || logErr);
+      }
+
+      const observationId = body.observation_id || body.observationId;
+      const species = body.species || body.name || body.display_name;
+      const identificationType = (body.identification_type || body.identificationType || 'lepidoptera').toString();
+      if (!observationId || !species) {
+        return new Response(JSON.stringify({ success: false, error: 'Missing observation_id or species' }), { status: 400, headers });
+      }
+
+      // Ensure observation exists
+      const { data: obs, error: obsError } = await supabase.from('observations').select('id, user_id').eq('id', observationId).single();
+      if (obsError || !obs) {
+        return new Response(JSON.stringify({ success: false, error: obsError?.message || 'Observation not found' }), { status: 404, headers });
+      }
+
+      // Insert identification
+      const identPayload: any = {
+        observation_id: observationId,
+        user_id: user.id,
+        species: species,
+        scientific_name: body.scientific_name || body.sciname || null,
+        // store user-provided reason in the caption column
+        caption: body.reason || body.caption || null,
+        identification_type: identificationType,
+        is_auto_suggested: false,
+      };
+
+      // Debug: log the payload we're about to insert (don't include full caption text, just length)
+      try {
+        console.log('suggest-identification: inserting identPayload keys ->', Object.keys(identPayload));
+        console.log('suggest-identification: caption length ->', identPayload.caption ? String(identPayload.caption).length : 0);
+      } catch (logErr) {
+        console.warn('Failed to log identPayload debug info', logErr?.message || logErr);
+      }
+
+      const { data: identData, error: identError } = await supabase.from('identifications').insert([identPayload]).select().single();
+      if (identError || !identData) {
+        return new Response(JSON.stringify({ success: false, error: identError?.message || 'Failed to create identification' }), { status: 500, headers });
+      }
+
+      // Add an initial vote from the suggester (so they implicitly agree with their suggestion)
+      try {
+        await supabase.from('identification_votes').insert([{ identification_id: identData.id, user_id: user.id }]);
+      } catch (e) {
+        // non-fatal - continue
+        console.warn('Failed to insert initial identification vote', e?.message || e);
+      }
+
+      // Create a notification for the observation owner (if different)
+      try {
+        if (obs.user_id && obs.user_id !== user.id) {
+          await supabase.from('notifications').insert([{
+            user_id: obs.user_id,
+            observation_id: observationId,
+            identification_id: identData.id,
+            type: 'identification_suggested',
+            message: `${user.user_metadata?.full_name || user.email || 'A user'} suggested an identification`,
+          }]);
+        }
+      } catch (e) {
+        console.warn('Failed to create notification for suggestion', e?.message || e);
+      }
+
+      return new Response(JSON.stringify({ success: true, data: identData }), { status: 200, headers });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers });
+    }
+  }
+
+  // --- Agree Identification (vote) ---
+  if (path === '/agree-identification' && req.method === 'POST') {
+    try {
+      const body = await req.json();
+      const authHeader = req.headers.get('Authorization');
+      if (!authHeader) {
+        return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
+      }
+      const token = authHeader.replace('Bearer ', '');
+
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+      if (userError || !user) {
+        return new Response(JSON.stringify({ success: false, error: 'Invalid token' }), { status: 401, headers });
+      }
+
+      const identificationId = body.identification_id || body.identificationId || body.id;
+      if (!identificationId) {
+        return new Response(JSON.stringify({ success: false, error: 'Missing identification_id' }), { status: 400, headers });
+      }
+
+      // Check if user already voted
+      const { data: existing, error: existingError } = await supabase.from('identification_votes').select('*').eq('identification_id', identificationId).eq('user_id', user.id).limit(1);
+      if (existingError) {
+        // continue and try inserting (non-fatal)
+        console.warn('Error checking existing votes', existingError.message || existingError);
+      }
+      if (existing && existing.length > 0) {
+        return new Response(JSON.stringify({ success: true, message: 'Already voted' }), { status: 200, headers });
+      }
+
+      const { data: voteData, error: voteError } = await supabase.from('identification_votes').insert([{ identification_id: identificationId, user_id: user.id }]).select().single();
+      if (voteError) {
+        return new Response(JSON.stringify({ success: false, error: voteError.message || 'Failed to insert vote' }), { status: 500, headers });
+      }
+
+      return new Response(JSON.stringify({ success: true, data: voteData }), { status: 200, headers });
+    } catch (error: any) {
+      return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers });
+    }
+  }
+
   // --- Notifications ---
   if (path === '/notifications') {
     try {
@@ -340,9 +486,10 @@ Deno.serve(async (req) => {
       }
 
       // Update notification to read for this user
+      // Use `is_read` column name (DB uses is_read) and set read_at timestamp
       const { error: updateError } = await supabase
         .from('notifications')
-        .update({ read: true })
+        .update({ is_read: true, read_at: new Date().toISOString() })
         .eq('id', notifId)
         .eq('user_id', user.id);
 
@@ -362,230 +509,13 @@ Deno.serve(async (req) => {
 
   // --- Observation Comments ---
   if (path.match(/^\/observations\/[\w-]+\/comments$/)) {
-    const obsId = path.split('/')[2];
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    if (req.method === 'GET') {
-      // List comments for observation (robust: fetch comments then batch-fetch profiles)
-      try {
-        const { data: commentsData, error: commentsError } = await supabase
-          .from('comments')
-          .select('id, text, created_at, user_id')
-          .eq('observation_id', obsId)
-          .order('created_at', { ascending: true });
-        if (commentsError) throw commentsError;
-
-        // Batch fetch profiles for the comments' authors
-        const userIds = Array.from(new Set((commentsData || []).map((c: any) => c.user_id).filter(Boolean)));
-        let profilesMap: Record<string, any> = {};
-        if (userIds.length > 0) {
-          const { data: profilesData } = await supabase
-            .from('profiles')
-            .select('id, username, name, avatar_url')
-            .in('id', userIds);
-          if (profilesData) {
-            for (const p of profilesData) profilesMap[p.id] = p;
-          }
-        }
-
-        const formatted = (commentsData || []).map((c: any) => ({
-          id: c.id,
-          text: c.text,
-          createdAt: c.created_at,
-          userId: c.user_id,
-          userName: profilesMap[c.user_id]?.username || profilesMap[c.user_id]?.name || 'Unknown',
-          userAvatar: profilesMap[c.user_id]?.avatar_url || null,
-        }));
-
-        return new Response(
-          JSON.stringify({ success: true, data: formatted }),
-          { status: 200, headers }
-        );
-      } catch (error) {
-        return new Response(
-          JSON.stringify({ success: false, error: error.message }),
-          { status: 500, headers }
-        );
-      }
-    } else if (req.method === 'POST') {
-      // Add a comment
-      try {
-        const authHeader = req.headers.get('Authorization');
-        if (!authHeader) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Unauthorized' }),
-            { status: 401, headers }
-          );
-        }
-        const token = authHeader.replace('Bearer ', '');
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (userError || !user) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Invalid token' }),
-            { status: 401, headers }
-          );
-        }
-        const body = await req.json();
-        if (!body.text || !body.text.trim()) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Comment text required' }),
-            { status: 400, headers }
-          );
-        }
-        // Insert comment
-        const { data: comment, error: dbError } = await supabase
-          .from('comments')
-          .insert({
-            observation_id: obsId,
-            user_id: user.id,
-            text: body.text,
-          })
-          .select()
-          .single();
-        if (dbError) {
-          return new Response(
-            JSON.stringify({ success: false, error: dbError.message }),
-            { status: 500, headers }
-          );
-        }
-        // Fetch observation to get owner
-        const { data: obs, error: obsError } = await supabase
-          .from('observations')
-          .select('id, user_id')
-          .eq('id', obsId)
-          .single();
-        if (!obsError && obs && obs.user_id !== user.id) {
-          // Create notification for owner
-            // Try to prefer the profile username (stored in profiles) over auth.email
-            const { data: commenterProfile } = await supabase
-              .from('profiles')
-              .select('username, name')
-              .eq('id', user.id)
-              .single();
-
-            const actorName = commenterProfile?.username || commenterProfile?.name || user.email || 'Someone';
-
-            await supabase
-              .from('notifications')
-              .insert({
-                user_id: obs.user_id,
-                observation_id: obsId,
-                comment_id: comment.id,
-                type: 'new_comment',
-                message: `${actorName} commented on your observation`,
-              });
-        }
-        // Return new comment
-        return new Response(
-          JSON.stringify({ success: true, data: comment }),
-          { status: 201, headers }
-        );
-      } catch (error) {
-        return new Response(
-          JSON.stringify({ success: false, error: error.message }),
-          { status: 500, headers }
-        );
-      }
-    } else {
-      return new Response(
-        JSON.stringify({ error: 'Method not allowed' }),
-        { status: 405, headers }
-      );
-    }
+    return await handleObservationComments(req, path, url, headers);
   }
 
   // --- Observations ---
-  // 1. Handle Single Observation GET (Move this OUT of the list check)
+  // 1. Handle Single Observation GET (delegated to src/routes/observation)
   if (path.match(/^\/observations\/[\w-]+$/) && req.method === 'GET') {
-    try {
-      const obsId = path.split('/')[2];
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      // Get observation
-      const { data: obs, error: obsError } = await supabase
-        .from('observations')
-        .select(`*,
-          lepidoptera:lepidoptera_taxonomy(scientific_name, common_name, family),
-          plant:plant_taxonomy(scientific_name, common_name, family)
-        `)
-        .eq('id', obsId)
-        .single();
-
-      if (obsError || !obs) {
-        return new Response(
-          JSON.stringify({ success: false, error: obsError?.message || 'Not found' }),
-          { status: 404, headers }
-        );
-      }
-
-      // Get user profile
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('id, name, username, avatar_url, observation_count')
-        .eq('id', obs.user_id)
-        .single();
-
-      // Get images
-      const { data: images } = await supabase
-        .from('observation_images')
-        .select('observation_id, image_url, image_type')
-        .eq('observation_id', obsId);
-
-      const lepImg = images?.find(i => i.image_type === 'lepidoptera');
-      const plantImg = images?.find(i => i.image_type === 'plant');
-
-      // Get comments (robust: fetch comments then batch-fetch profiles)
-      const { data: commentsData } = await supabase
-        .from('comments')
-        .select('id, text, created_at, user_id')
-        .eq('observation_id', obsId)
-        .order('created_at', { ascending: true });
-
-      const userIds = Array.from(new Set((commentsData || []).map((c: any) => c.user_id).filter(Boolean)));
-      let profilesMap: Record<string, any> = {};
-      if (userIds.length > 0) {
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, username, name, avatar_url')
-          .in('id', userIds);
-        if (profilesData) {
-          for (const p of profilesData) profilesMap[p.id] = p;
-        }
-      }
-
-      const formattedComments = (commentsData || []).map((c: any) => ({
-        id: c.id,
-        text: c.text,
-        createdAt: c.created_at,
-        userId: c.user_id,
-        userName: profilesMap[c.user_id]?.username || profilesMap[c.user_id]?.name || 'Unknown',
-        userAvatar: profilesMap[c.user_id]?.avatar_url || null,
-      }));
-
-      // Compose response
-      const enriched = {
-        ...obs,
-        user: userProfile || null,
-        lepidoptera_image_url: lepImg ? lepImg.image_url : null,
-        plant_image_url: plantImg ? plantImg.image_url : null,
-        image_url: lepImg ? lepImg.image_url : (plantImg ? plantImg.image_url : null),
-        comments: formattedComments,
-      };
-
-      return new Response(
-        JSON.stringify({ success: true, data: enriched }),
-        { status: 200, headers }
-      );
-    } catch (error: any) {
-      return new Response(
-        JSON.stringify({ success: false, error: error.message }),
-        { status: 500, headers }
-      );
-    }
+    return await handleObservationGet(req, path, url, headers);
   }
 
   // 2. Handle Observations List (GET) and Create (POST)

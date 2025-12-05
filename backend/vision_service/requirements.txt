@@ -1,0 +1,11 @@
+torchvision
+fastapi
+uvicorn[standard]
+Pillow
+requests
+huggingface-hub
+timm
+numpy
+
+# NOTE: torch is intentionally NOT included here due to large wheel sizes.
+# Install torch separately for your platform using the official instructions.

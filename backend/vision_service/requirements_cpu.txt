@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+Pillow
+requests
+huggingface_hub
+timm
+numpy
+pycocotools

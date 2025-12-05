@@ -31,11 +31,17 @@ export function NotificationsPage({ accessToken, onNotificationRead }: Notificat
   const [selectedObservation, setSelectedObservation] = useState<any | null>(null);
 
   useEffect(() => {
-    fetchNotifications();
+    if (accessToken) fetchNotifications();
   }, []);
 
   const fetchNotifications = async () => {
     setIsLoading(true);
+    if (!accessToken) {
+      // If not authenticated, avoid polling the edge function which will return 401s
+      setNotifications([]);
+      setIsLoading(false);
+      return;
+    }
     try {
       const response = await apiClient.get(
         '/notifications',
