@@ -33,17 +33,37 @@ class FrontendApiClient {
     const { method = "GET", body, accessToken } = options;
 
     const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+    // Track where the auth token came from for debugging (non-sensitive string only)
+    let authSource = 'anon'; // 'prop' | 'session' | 'anon'
     const headers: HeadersInit = {
       "Content-Type": "application/json",
-      // Add Supabase anon key for all requests to edge functions
+      // Add Supabase anon key for all requests to edge functions by default
       "Authorization": `Bearer ${anonKey}`,
       // Also include the anon key as the apikey header which some Supabase endpoints expect
       "apikey": anonKey,
+      // Non-sensitive debug header to indicate the source of the Authorization token
+      "x-auth-source": authSource,
     };
 
-    // Override with user access token if provided
+    // If caller provided an explicit accessToken, use it; otherwise try to read
+    // the current session token from the Supabase client so logged-in users
+    // send their JWT instead of the anon key.
     if (accessToken) {
       headers["Authorization"] = `Bearer ${accessToken}`;
+      authSource = 'prop';
+      headers['x-auth-source'] = authSource;
+    } else {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const sessionToken = session?.access_token;
+        if (sessionToken) {
+          headers["Authorization"] = `Bearer ${sessionToken}`;
+          authSource = 'session';
+          headers['x-auth-source'] = authSource;
+        }
+      } catch (e) {
+        // Non-fatal; keep anon key if session check fails
+      }
     }
 
     try {

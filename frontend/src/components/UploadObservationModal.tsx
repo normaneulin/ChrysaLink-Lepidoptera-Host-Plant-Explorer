@@ -302,6 +302,16 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       onSuccess();
       onClose();
 
+      // Refresh the page so the home view shows the newly uploaded observation.
+      // Delay slightly to allow the modal to close and any navigation to settle.
+      try {
+        if (typeof window !== 'undefined' && window.location) {
+          setTimeout(() => window.location.reload(), 200);
+        }
+      } catch (e) {
+        console.warn('Failed to reload page after upload', e);
+      }
+
       // Reset form
       setLepidopteraImages([]);
       setHostPlantImages([]);

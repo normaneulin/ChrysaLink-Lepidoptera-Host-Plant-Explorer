@@ -1356,7 +1356,7 @@ export function ObservationDetailModal({
                   {/* Accept community taxon: owner-only action that writes to observation */}
                   {localObservation.user && currentUserId === localObservation.user.id ? (
                     <div className="flex flex-col items-end gap-2">
-                      <div className="text-xs text-gray-500">Owner Actions</div>
+                      {/*<div className="text-xs text-gray-500">Owner Actions</div>*/}
                       <Button
                         size="sm"
                         onClick={() => handleAcceptCommunityTaxon(communityForType)}
@@ -1377,7 +1377,7 @@ export function ObservationDetailModal({
             ) : (
               <div>
                 <div className="text-xs font-semibold text-gray-500">Community Taxon</div>
-                <div className="text-lg font-bold text-gray-900 mt-1">Not yet identified</div>
+                <div className="text-lg font-bold text-gray-900 mt-1">No community taxon yet</div>
                 <div className="text-xs text-gray-500 italic">No suggestions yet for {suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Host Plant'}</div>
                 <div className="text-sm font-medium text-gray-700 mt-2">0 vote(s)</div>
                       <div className="text-xs text-gray-500">Consensus threshold for owner accept: {acceptThreshold} / {totalIdentificationsForType}</div>

@@ -178,6 +178,15 @@ CREATE TABLE public.rating_systems (
   CONSTRAINT rating_systems_pkey PRIMARY KEY (id),
   CONSTRAINT rating_systems_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
 );
+CREATE TABLE public.relationship_links (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  relationship_id uuid NOT NULL,
+  observation_id uuid NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT relationship_links_pkey PRIMARY KEY (id),
+  CONSTRAINT fk_rl_relationship FOREIGN KEY (relationship_id) REFERENCES public.relationships(id),
+  CONSTRAINT fk_rl_observation FOREIGN KEY (observation_id) REFERENCES public.observations(id)
+);
 CREATE TABLE public.relationships (
   id uuid NOT NULL DEFAULT gen_random_uuid(),
   lepidoptera_id uuid NOT NULL,
@@ -187,9 +196,11 @@ CREATE TABLE public.relationships (
   verified_count integer DEFAULT 0,
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,
+  observation_id uuid,
   CONSTRAINT relationships_pkey PRIMARY KEY (id),
   CONSTRAINT relationships_lepidoptera_id_fkey FOREIGN KEY (lepidoptera_id) REFERENCES public.lepidoptera_taxonomy(id),
-  CONSTRAINT relationships_plant_id_fkey FOREIGN KEY (plant_id) REFERENCES public.plant_taxonomy(id)
+  CONSTRAINT relationships_plant_id_fkey FOREIGN KEY (plant_id) REFERENCES public.plant_taxonomy(id),
+  CONSTRAINT relationships_observation_id_fkey FOREIGN KEY (observation_id) REFERENCES public.observations(id)
 );
 CREATE TABLE public.taxonomy_divisions (
   id uuid NOT NULL DEFAULT gen_random_uuid(),

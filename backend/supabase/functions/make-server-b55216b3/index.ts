@@ -10,7 +10,7 @@ Deno.serve(async (req) => {
   // CORS headers
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-auth-source',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
     // Allow credentials for auth flows if callers use cookies; Vary by Origin when not using '*'
     'Access-Control-Allow-Credentials': 'true',
@@ -24,6 +24,39 @@ Deno.serve(async (req) => {
 
   const headers = { ...corsHeaders, 'Content-Type': 'application/json' };
 
+  // Helper: compute relationship_type based on thresholds configured via environment
+  function computeRelationshipType(verifiedCount: number, observationCount: number) {
+    // Read thresholds from environment with sane defaults
+    const preferredThreshold = parseInt(Deno.env.get('RELATIONSHIP_PREFERRED_THRESHOLD') || '3', 10);
+    const alternateThreshold = parseInt(Deno.env.get('RELATIONSHIP_ALTERNATE_THRESHOLD') || '2', 10);
+    const occasionalThreshold = parseInt(Deno.env.get('RELATIONSHIP_OCCASIONAL_THRESHOLD') || '1', 10);
+    // A count of observations alone can be used as a weak signal when no verified votes exist
+    const observationThreshold = parseInt(Deno.env.get('RELATIONSHIP_OBSERVATION_THRESHOLD') || '5', 10);
+
+    // Normalize thresholds so they make logical sense (preferred >= alternate >= occasional)
+    const occ = Math.max(0, occasionalThreshold);
+    const alt = Math.max(occ, alternateThreshold);
+    const pref = Math.max(alt, preferredThreshold);
+
+    const v = Math.max(0, verifiedCount || 0);
+    const o = Math.max(0, observationCount || 0);
+
+    // Rule set (priority order):
+    // 1) If enough verified counts -> preferred
+    // 2) Else if enough verified counts -> alternate
+    // 3) Else if enough verified counts -> occasional
+    // 4) Else if observation_count meets a configured observation-only threshold -> host_plant
+    // 5) Otherwise default to 'host_plant'
+
+    if (v >= pref) return 'preferred_host';
+    if (v >= alt) return 'alternate_host';
+    if (v >= occ) return 'occasional_host';
+
+    if (o >= observationThreshold) return 'host_plant';
+
+    return 'host_plant';
+  }
+
   // Route handling
     // --- Observation Deletion with Storage Cleanup ---
     if (path.match(/^\/observations\/[\w-]+$/) && req.method === 'DELETE') {
@@ -32,10 +65,10 @@ Deno.serve(async (req) => {
         const supabaseUrl = Deno.env.get('SUPABASE_URL');
         const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
         const supabase = createClient(supabaseUrl, supabaseKey);
-        // Get observation details
+        // Get observation details (include taxonomy ids so we can decrement relationships)
         const { data: obs, error: obsError } = await supabase
           .from('observations')
-          .select('id, user_id')
+          .select('id, user_id, lepidoptera_id, plant_id')
           .eq('id', obsId)
           .single();
         if (obsError || !obs) {
@@ -44,6 +77,10 @@ Deno.serve(async (req) => {
             { status: 404, headers }
           );
         }
+
+        // For per-observation relationships we rely on the DB foreign key (ON DELETE CASCADE)
+        // to remove relationship rows tied to this observation. No decrement logic required here.
+
         // List all images for this observation
         const folder = `${obs.user_id}/${obs.id}/`;
         const { data: files, error: filesError } = await supabase.storage.from('observation-images').list(folder);
@@ -51,6 +88,7 @@ Deno.serve(async (req) => {
           const fileNames = files.map(f => `${folder}${f.name}`);
           await supabase.storage.from('observation-images').remove(fileNames);
         }
+
         // Delete observation from database
         const { error: dbError } = await supabase.from('observations').delete().eq('id', obsId);
         if (dbError) {
@@ -101,18 +139,150 @@ Deno.serve(async (req) => {
           return new Response(JSON.stringify({ success: false, error: 'No updatable fields provided' }), { status: 400, headers });
         }
 
-        // Verify ownership
-        const { data: obs, error: obsErr } = await supabase.from('observations').select('id, user_id').eq('id', obsId).single();
-        if (obsErr || !obs) {
+        // Verify ownership and fetch existing taxonomy ids so we can handle moves
+        const { data: oldObs, error: obsErr } = await supabase.from('observations').select('id, user_id, lepidoptera_id, plant_id, lepidoptera_current_identification, plant_current_identification').eq('id', obsId).single();
+        if (obsErr || !oldObs) {
           return new Response(JSON.stringify({ success: false, error: obsErr?.message || 'Observation not found' }), { status: 404, headers });
         }
-        if (String(obs.user_id) !== String(user.id)) {
+        if (String(oldObs.user_id) !== String(user.id)) {
           return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), { status: 403, headers });
+        }
+
+        // Count verified identifications for this observation before any changes (used when decrementing verified_count)
+        let verifiedCountBefore = 0;
+        try {
+          const { data: verifiedData, count: verifiedCount } = await supabase.from('identifications').select('id', { count: 'exact' }).eq('observation_id', obsId).eq('is_verified', true);
+          verifiedCountBefore = verifiedCount || 0;
+        } catch (e) {
+          // non-fatal
+          console.warn('Failed to count verified identifications before update', e?.message || e);
         }
 
         const { data: updated, error: updateErr } = await supabase.from('observations').update(allowed).eq('id', obsId).select().single();
         if (updateErr) {
           return new Response(JSON.stringify({ success: false, error: updateErr.message || 'Failed to update observation' }), { status: 500, headers });
+        }
+
+        // Handle moves: if the observation moved from one lepidoptera/plant pair to another,
+        // decrement counts on the old pair (observation_count and verified_count) and
+        // clean up empty relationship rows.
+        try {
+          const oldLep = oldObs.lepidoptera_id || null;
+          const oldPlant = oldObs.plant_id || null;
+
+          // Determine new taxonomy ids (may have been set earlier by other code)
+          let newLep = updated.lepidoptera_id || null;
+          let newPlant = updated.plant_id || null;
+
+          // If new ids not present, attempt resolving from updated current identification text
+          if (!newLep && updated.lepidoptera_current_identification) {
+            const q = String(updated.lepidoptera_current_identification).trim();
+            const { data: lepMatch } = await supabase
+              .from('lepidoptera_taxonomy')
+              .select('id')
+              .or(`scientific_name.ilike.%${q}%,common_name.ilike.%${q}%,genus.ilike.%${q}%`)
+              .limit(1)
+              .maybeSingle();
+            if (lepMatch && lepMatch.id) newLep = lepMatch.id;
+          }
+          if (!newPlant && updated.plant_current_identification) {
+            const q2 = String(updated.plant_current_identification).trim();
+            const { data: plantMatch } = await supabase
+              .from('plant_taxonomy')
+              .select('id')
+              .or(`scientific_name.ilike.%${q2}%,common_name.ilike.%${q2}%,genus.ilike.%${q2}%`)
+              .limit(1)
+              .maybeSingle();
+            if (plantMatch && plantMatch.id) newPlant = plantMatch.id;
+          }
+
+          // If the pair changed (including cases where one side was added/removed), adjust old relationship
+          if (oldLep && oldPlant && (oldLep !== newLep || oldPlant !== newPlant)) {
+            try {
+              const { data: relRow } = await supabase
+                .from('relationships')
+                .select('id, observation_count, verified_count')
+                .eq('lepidoptera_id', oldLep)
+                .eq('plant_id', oldPlant)
+                .limit(1)
+                .maybeSingle();
+
+              if (relRow && relRow.id) {
+                const newObsCount = Math.max((relRow.observation_count || 0) - 1, 0);
+                const newVerified = Math.max((relRow.verified_count || 0) - verifiedCountBefore, 0);
+                const newRelType = computeRelationshipType(newVerified, newObsCount);
+                const { error: relUpdateErr } = await supabase
+                  .from('relationships')
+                  .update({ observation_count: newObsCount, verified_count: newVerified, relationship_type: newRelType, updated_at: new Date().toISOString() })
+                  .eq('id', relRow.id);
+                if (!relUpdateErr && newObsCount === 0 && newVerified === 0) {
+                  await supabase.from('relationships').delete().eq('id', relRow.id);
+                }
+              }
+            } catch (decErr) {
+              console.warn('Failed to decrement relationships for moved observation', decErr?.message || decErr);
+            }
+          }
+        } catch (moveErr) {
+          console.warn('Failed to handle relationship move after observation update', moveErr?.message || moveErr);
+        }
+
+        // --- Update relationships when identifications changed ---
+        try {
+          // Resolve lepidoptera_id and plant_id from the (possibly updated) observation record
+          const obsRow = updated;
+          let lepId = obsRow.lepidoptera_id || null;
+          let plantId = obsRow.plant_id || null;
+
+          // If taxonomy ids not present, try resolving from identification text
+          if (!lepId && obsRow.lepidoptera_current_identification) {
+            const q = String(obsRow.lepidoptera_current_identification).trim();
+            const { data: lepMatch } = await supabase
+              .from('lepidoptera_taxonomy')
+              .select('id')
+              .or(`scientific_name.ilike.%${q}%,common_name.ilike.%${q}%,genus.ilike.%${q}%`)
+              .limit(1)
+              .maybeSingle();
+            if (lepMatch && lepMatch.id) lepId = lepMatch.id;
+          }
+          if (!plantId && obsRow.plant_current_identification) {
+            const q2 = String(obsRow.plant_current_identification).trim();
+            const { data: plantMatch } = await supabase
+              .from('plant_taxonomy')
+              .select('id')
+              .or(`scientific_name.ilike.%${q2}%,common_name.ilike.%${q2}%,genus.ilike.%${q2}%`)
+              .limit(1)
+              .maybeSingle();
+            if (plantMatch && plantMatch.id) plantId = plantMatch.id;
+          }
+
+          // Link this observation to an aggregate relationship via the DB RPC
+          if (lepId && plantId) {
+            try {
+              // If this observation previously linked to an older relationship, remove that link
+              // so the RPC can create/link to the new pair. Deleting the link will trigger
+              // DB triggers to refresh counts for the previous relationship.
+              await supabase.from('relationship_links').delete().eq('observation_id', obsRow.id);
+
+              // Call DB RPC to create or link the aggregate relationship and refresh counts.
+              const rpcResp = await supabase.rpc('create_or_link_relationship', { _lep: lepId, _plant: plantId, _obs: obsRow.id });
+              // Log RPC response and verify DB state
+              console.log('RPC create_or_link_relationship (update) response ->', JSON.stringify(rpcResp));
+              if ((rpcResp as any)?.error) console.warn('RPC create_or_link_relationship (update) error', (rpcResp as any).error);
+              try {
+                const { data: linkRow, error: linkErr } = await supabase.from('relationship_links').select('*').eq('observation_id', obsRow.id).maybeSingle();
+                console.log('Post-RPC relationship_links lookup (update):', { linkRow, linkErr });
+                const { data: relRow, error: relErr } = await supabase.from('relationships').select('*').eq('lepidoptera_id', lepId).eq('plant_id', plantId).limit(1).maybeSingle();
+                console.log('Post-RPC relationships lookup (update):', { relRow, relErr });
+              } catch (qErr) {
+                console.warn('Post-RPC verification queries failed (update)', qErr?.message || qErr);
+              }
+            } catch (e) {
+              console.warn('Failed to link observation to relationship (update flow)', e?.message || e);
+            }
+          }
+        } catch (relErr) {
+          console.warn('Failed to update relationships on observation update', relErr?.message || relErr);
         }
 
         return new Response(JSON.stringify({ success: true, data: updated }), { status: 200, headers });
@@ -469,6 +639,109 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: false, error: e?.message || 'Failed to insert vote' }), { status: 500, headers });
       }
 
+      // After inserting the vote, check if the identification reaches the verification threshold
+      try {
+        const threshold = parseInt(Deno.env.get('VERIFICATION_VOTE_THRESHOLD') || '3', 10);
+
+        // Count votes for this identification
+        const { data: votesData, error: votesErr, count: votesCount } = await supabase
+          .from('identification_votes')
+          .select('*', { count: 'exact' })
+          .eq('identification_id', identificationId);
+        const totalVotes = votesCount ?? (votesData ? votesData.length : 0);
+
+        if (totalVotes >= threshold) {
+          // Fetch the identification row to check verified status and related info
+          const { data: identRow, error: identRowErr } = await supabase
+            .from('identifications')
+            .select('*')
+            .eq('id', identificationId)
+            .single();
+
+          if (identRow && !identRow.is_verified) {
+            // Mark identification as verified
+            await supabase.from('identifications').update({ is_verified: true, verified_at: new Date().toISOString(), verified_by_user_id: user.id }).eq('id', identificationId);
+
+            // Update the observation's current identification fields and try to resolve taxonomy ids
+            try {
+              // Update observation textual current identification
+              if (identRow.identification_type === 'lepidoptera') {
+                await supabase.from('observations').update({ lepidoptera_current_identification: identRow.species }).eq('id', identRow.observation_id);
+                // Try to resolve lepidoptera taxonomy id
+                const q = String(identRow.species || '').trim();
+                if (q.length > 0) {
+                  const { data: lepMatch } = await supabase
+                    .from('lepidoptera_taxonomy')
+                    .select('id')
+                    .or(`scientific_name.ilike.%${q}%,common_name.ilike.%${q}%,genus.ilike.%${q}%`)
+                    .limit(1)
+                    .maybeSingle();
+                  if (lepMatch && lepMatch.id) {
+                    await supabase.from('observations').update({ lepidoptera_id: lepMatch.id }).eq('id', identRow.observation_id);
+                  }
+                }
+              } else {
+                // Treat any non-'lepidoptera' type as plant/hostPlant
+                await supabase.from('observations').update({ plant_current_identification: identRow.species }).eq('id', identRow.observation_id);
+                const q2 = String(identRow.species || '').trim();
+                if (q2.length > 0) {
+                  const { data: plantMatch } = await supabase
+                    .from('plant_taxonomy')
+                    .select('id')
+                    .or(`scientific_name.ilike.%${q2}%,common_name.ilike.%${q2}%,genus.ilike.%${q2}%`)
+                    .limit(1)
+                    .maybeSingle();
+                  if (plantMatch && plantMatch.id) {
+                    await supabase.from('observations').update({ plant_id: plantMatch.id }).eq('id', identRow.observation_id);
+                  }
+                }
+              }
+
+              // Re-fetch observation to get resolved taxonomy ids
+              const { data: obsRow } = await supabase.from('observations').select('id, lepidoptera_id, plant_id').eq('id', identRow.observation_id).single();
+              if (obsRow && obsRow.lepidoptera_id && obsRow.plant_id) {
+                // For per-observation relationships we prefer to update the relationship row tied to
+                // this observation (if present). If not present, create one and mark verified_count.
+                try {
+                  const { data: relForObs } = await supabase
+                    .from('relationships')
+                    .select('id, verified_count, observation_count')
+                    .eq('observation_id', identRow.observation_id)
+                    .limit(1)
+                    .maybeSingle();
+
+                  // Use the DB RPC to ensure an aggregate relationship exists and this observation
+                  // is linked; the DB refresh function will recompute verified_count based on identifications.
+                  try {
+                    // Ensure any previous link for this observation is removed so the RPC can re-link
+                    await supabase.from('relationship_links').delete().eq('observation_id', identRow.observation_id);
+                    const rpcResp = await supabase.rpc('create_or_link_relationship', { _lep: obsRow.lepidoptera_id, _plant: obsRow.plant_id, _obs: identRow.observation_id });
+                    console.log('RPC create_or_link_relationship (verify) response ->', JSON.stringify(rpcResp));
+                    if ((rpcResp as any)?.error) console.warn('agree-identification: RPC error', (rpcResp as any).error);
+                    try {
+                      const { data: linkRow, error: linkErr } = await supabase.from('relationship_links').select('*').eq('observation_id', identRow.observation_id).maybeSingle();
+                      console.log('Post-RPC relationship_links lookup (verify):', { linkRow, linkErr });
+                      const { data: relRow, error: relErr } = await supabase.from('relationships').select('*').eq('lepidoptera_id', obsRow.lepidoptera_id).eq('plant_id', obsRow.plant_id).limit(1).maybeSingle();
+                      console.log('Post-RPC relationships lookup (verify):', { relRow, relErr });
+                    } catch (qErr) {
+                      console.warn('Post-RPC verification queries failed (verify)', qErr?.message || qErr);
+                    }
+                  } catch (e) {
+                    console.warn('agree-identification: failed to link observation via RPC', e?.message || e);
+                  }
+                } catch (relErr) {
+                  console.warn('agree-identification: failed to upsert relationships verified_count', relErr?.message || relErr);
+                }
+              }
+            } catch (obsUpdateErr) {
+              console.warn('agree-identification: failed to update observation/taxonomy after verification', obsUpdateErr?.message || obsUpdateErr);
+            }
+          }
+        }
+      } catch (verifyErr) {
+        console.warn('agree-identification: verification check failed', verifyErr?.message || verifyErr);
+      }
+
       return new Response(JSON.stringify({ success: true, data: voteData }), { status: 200, headers });
     } catch (error: any) {
       return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500, headers });
@@ -759,6 +1032,57 @@ Deno.serve(async (req) => {
               { status: 500, headers }
             );
           }
+        }
+        // --- Update relationships table ---
+        try {
+          // Determine lepidoptera_id and plant_id to use for relationships
+          let lepId = obs.lepidoptera_id || null;
+          let plantId = obs.plant_id || null;
+
+          // If taxonomy ids weren't provided, attempt to resolve from provided identification text
+          if (!lepId && body.lepidoptera_current_identification) {
+            const q = String(body.lepidoptera_current_identification).trim();
+            const { data: lepMatch } = await supabase
+              .from('lepidoptera_taxonomy')
+              .select('id')
+              .or(`scientific_name.ilike.%${q}%,common_name.ilike.%${q}%,genus.ilike.%${q}%`)
+              .limit(1)
+              .maybeSingle();
+            if (lepMatch && lepMatch.id) lepId = lepMatch.id;
+          }
+          if (!plantId && body.plant_current_identification) {
+            const q2 = String(body.plant_current_identification).trim();
+            const { data: plantMatch } = await supabase
+              .from('plant_taxonomy')
+              .select('id')
+              .or(`scientific_name.ilike.%${q2}%,common_name.ilike.%${q2}%,genus.ilike.%${q2}%`)
+              .limit(1)
+              .maybeSingle();
+            if (plantMatch && plantMatch.id) plantId = plantMatch.id;
+          }
+
+          if (lepId && plantId) {
+            // Create a relationship row tied to this observation. Each observation creates its own
+            // relationship record (so deletions cascade when the observation is removed).
+            try {
+              // Link the newly created observation to an aggregate relationship using the DB RPC.
+              const rpcResp = await supabase.rpc('create_or_link_relationship', { _lep: lepId, _plant: plantId, _obs: obs.id });
+              console.log('RPC create_or_link_relationship (create) response ->', JSON.stringify(rpcResp));
+              if ((rpcResp as any)?.error) console.warn('create: RPC error', (rpcResp as any).error);
+              try {
+                const { data: linkRow, error: linkErr } = await supabase.from('relationship_links').select('*').eq('observation_id', obs.id).maybeSingle();
+                console.log('Post-RPC relationship_links lookup (create):', { linkRow, linkErr });
+                const { data: relRow, error: relErr } = await supabase.from('relationships').select('*').eq('lepidoptera_id', lepId).eq('plant_id', plantId).limit(1).maybeSingle();
+                console.log('Post-RPC relationships lookup (create):', { relRow, relErr });
+              } catch (qErr) {
+                console.warn('Post-RPC verification queries failed (create)', qErr?.message || qErr);
+              }
+            } catch (e) {
+              console.warn('Failed to create_or_link_relationship for new observation', e?.message || e);
+            }
+          }
+        } catch (relErr) {
+          console.warn('Failed to update relationships for new observation', relErr?.message || relErr);
         }
         return new Response(
           JSON.stringify({ success: true, data: obs }),

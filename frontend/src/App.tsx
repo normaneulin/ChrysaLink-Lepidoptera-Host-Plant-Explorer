@@ -310,11 +310,11 @@ export default function App() {
       )}
 
       {/* Upload Modal */}
-      {accessToken && (
+      {isUploadModalOpen && (
         <UploadObservationModal
           isOpen={isUploadModalOpen}
           onClose={() => setIsUploadModalOpen(false)}
-          accessToken={accessToken}
+          accessToken={(accessToken ?? localStorage.getItem('accessToken')) as string | null}
           onSuccess={handleUploadSuccess}
         />
       )}
