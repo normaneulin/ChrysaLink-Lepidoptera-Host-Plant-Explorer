@@ -1246,25 +1246,8 @@ export function ObservationDetailModal({
                       )}
                       <div className="text-sm text-gray-600 mt-2">{topCommunityTaxon.count} vote(s)</div>
                       <div className="mt-3">
-                        
-                        <div className="w-full bg-gray-200 rounded h-6 relative overflow-hidden">
-                          {/* vote segments */}
-                          <div className="flex h-full w-full">
-                            {voteSegments.length > 0 ? (
-                              voteSegments.map((seg: any, i: number) => (
-                                <div key={seg.species + i} style={{ width: `${seg.percent}%` }} className={`h-full ${i % 2 === 0 ? 'bg-amber-400' : 'bg-green-400'}`} title={`${seg.species}: ${seg.count}`} />
-                              ))
-                            ) : (
-                              <div className="h-full w-full bg-gray-300" />
-                            )}
-                          </div>
-                          {/* two-thirds marker */}
-                          <div style={{ position: 'absolute', left: `${(2 / 3) * 100}%`, top: 0, bottom: 0, width: 2, background: 'rgba(0,0,0,0.5)' }} />
-                        </div>
-                                  
-                        <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
-                          <div>{totalIdentificationsForType} total ID(s)</div>
-                          <div>2/3 = {thresholdByIds} vote(s)</div>
+                        <div className="text-sm text-gray-600">
+                          {totalIdentificationsForType} total ID(s) — consensus threshold: {thresholdByIds} vote(s) (2/3)
                         </div>
                       </div>
                     </>
