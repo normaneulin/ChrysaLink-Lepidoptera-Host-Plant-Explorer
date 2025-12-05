@@ -227,6 +227,8 @@ export default function App() {
         onLogout={handleLogout}
         notificationCount={notificationCount}
         isLoggingOut={isLoggingOut}
+        setIsUploadModalOpen={setIsUploadModalOpen}
+        userId={userId || undefined}
       />
       
       <main className="min-h-screen bg-gray-50">
