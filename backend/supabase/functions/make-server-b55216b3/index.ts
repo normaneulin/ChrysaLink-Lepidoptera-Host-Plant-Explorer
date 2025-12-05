@@ -380,6 +380,19 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: false, error: 'Missing identification_id' }), { status: 400, headers });
       }
 
+      // Verify identification exists (avoid FK errors when clients pass local/temporary ids)
+      try {
+        const { data: identCheck, error: identCheckErr } = await supabase.from('identifications').select('id, observation_id').eq('id', identificationId).limit(1);
+        if (identCheckErr) {
+          console.warn('agree-identification: error fetching identification for id', identificationId, identCheckErr.message || identCheckErr);
+        }
+        if (!identCheck || identCheck.length === 0) {
+          return new Response(JSON.stringify({ success: false, error: 'Identification not found' }), { status: 404, headers });
+        }
+      } catch (e) {
+        console.warn('agree-identification: exception while checking identification', e?.message || e);
+      }
+
       // Check if user already voted
       const { data: existing, error: existingError } = await supabase.from('identification_votes').select('*').eq('identification_id', identificationId).eq('user_id', user.id).limit(1);
       if (existingError) {
@@ -390,9 +403,17 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({ success: true, message: 'Already voted' }), { status: 200, headers });
       }
 
-      const { data: voteData, error: voteError } = await supabase.from('identification_votes').insert([{ identification_id: identificationId, user_id: user.id }]).select().single();
-      if (voteError) {
-        return new Response(JSON.stringify({ success: false, error: voteError.message || 'Failed to insert vote' }), { status: 500, headers });
+      let voteData: any = null;
+      try {
+        const insertResp = await supabase.from('identification_votes').insert([{ identification_id: identificationId, user_id: user.id }]).select().single();
+        voteData = insertResp.data;
+        if (insertResp.error) {
+          console.warn('agree-identification: vote insert error', insertResp.error.message || insertResp.error);
+          return new Response(JSON.stringify({ success: false, error: insertResp.error.message || 'Failed to insert vote' }), { status: 500, headers });
+        }
+      } catch (e: any) {
+        console.error('agree-identification: exception inserting vote', e?.message || e);
+        return new Response(JSON.stringify({ success: false, error: e?.message || 'Failed to insert vote' }), { status: 500, headers });
       }
 
       return new Response(JSON.stringify({ success: true, data: voteData }), { status: 200, headers });

@@ -8,6 +8,10 @@ import { supabase } from '../lib/supabase';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
   `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/make-server-b55216b3`;
+// Function invocation mode: 'gateway' (default) uses a single gateway function (make-server)
+// 'direct' will call individual function endpoints directly at
+// https://<project>.supabase.co/functions/v1/<functionName>
+const FUNCTION_MODE = (import.meta.env.VITE_FUNCTION_MODE || 'gateway').toString();
 
 export interface ApiResponse<T = any> {
   success: boolean;
@@ -44,9 +48,26 @@ class FrontendApiClient {
 
     try {
       // Normalize URL joining to avoid duplicated or missing slashes
+      // Resolve target URL depending on FUNCTION_MODE
       const base = BACKEND_URL.replace(/\/$/, '');
       const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-      const fetchUrl = `${base}${path}`;
+      let fetchUrl = `${base}${path}`;
+
+      // If configured to call functions directly, and the endpoint is a top-level function name
+      // like '/suggest-identification' or '/agree-identification', route directly to that function
+      // instead of the gateway. This ensures individual edge functions receive the request
+      // and their logs show the invocation.
+      if (FUNCTION_MODE === 'direct') {
+        // If the endpoint looks like a single segment path (e.g. '/agree-identification' or '/my-fn'),
+        // map it to /functions/v1/<name>
+        const singleSegment = path.match(/^\/([a-z0-9\-]+)$/i);
+        if (singleSegment) {
+          const fnName = singleSegment[1];
+          fetchUrl = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/${fnName}`;
+          // eslint-disable-next-line no-console
+          console.debug('API client request -> direct function', { fnName, url: fetchUrl });
+        }
+      }
       // Debug: log the outgoing function URL and whether an access token is provided
       // (Do not log the token itself to avoid leaking secrets)
       // eslint-disable-next-line no-console
@@ -82,6 +103,117 @@ class FrontendApiClient {
           console.warn('API client: edge function returned 401 for species search; falling back to local Supabase search', { endpoint, q, type });
           // Return the same shape as other ApiResponse
           return await this.searchSpecies(q, type);
+        }
+
+        // If an observation GET failed (4xx/5xx), attempt the same Supabase fallback as when the function host is unreachable.
+        if (endpoint.startsWith('/observations/') && method === 'GET') {
+          try {
+            const obsId = endpoint.split('/')[2];
+            if (obsId) {
+              const { data, error } = await supabase
+                .from('observations')
+                .select(`*, lepidoptera:lepidoptera_taxonomy(scientific_name, common_name, family), plant:plant_taxonomy(scientific_name, common_name, family)`)
+                .eq('id', obsId)
+                .single();
+              if (error) throw error;
+
+              // Fetch images
+              const { data: images } = await supabase
+                .from('observation_images')
+                .select('observation_id, image_url, image_type')
+                .eq('observation_id', obsId);
+              const lepImg = images?.find((i: any) => i.image_type === 'lepidoptera');
+              const plantImg = images?.find((i: any) => i.image_type === 'plant');
+
+              // Fetch comments
+              const { data: commentsData } = await supabase
+                .from('comments')
+                .select('id, text, created_at, user_id')
+                .eq('observation_id', obsId)
+                .order('created_at', { ascending: true });
+
+              const userIds = Array.from(new Set((commentsData || []).map((c: any) => c.user_id).filter(Boolean)));
+              let profilesMap: Record<string, any> = {};
+              if (userIds.length > 0) {
+                const { data: profilesData } = await supabase
+                  .from('profiles')
+                  .select('id, username, name, avatar_url')
+                  .in('id', userIds);
+                if (profilesData) profilesData.forEach((p: any) => profilesMap[p.id] = p);
+              }
+
+              const formattedComments = (commentsData || []).map((c: any) => ({
+                id: c.id,
+                text: c.text,
+                createdAt: c.created_at,
+                userId: c.user_id,
+                userName: profilesMap[c.user_id]?.username || profilesMap[c.user_id]?.name || 'User',
+                userAvatar: profilesMap[c.user_id]?.avatar_url || null,
+              }));
+
+              // Fetch identifications and votes so suggested IDs appear in Activity when functions are down
+              const { data: identsData } = await supabase
+                .from('identifications')
+                .select('*')
+                .eq('observation_id', obsId)
+                .order('created_at', { ascending: true });
+
+              let idProfilesMap: Record<string, any> = {};
+              let identificationVotesMap: Record<string, any[]> = {};
+              if (identsData && identsData.length > 0) {
+                const idUserIds = Array.from(new Set(identsData.map((it: any) => it.user_id).filter(Boolean)));
+                if (idUserIds.length > 0) {
+                  const { data: idProfiles } = await supabase
+                    .from('profiles')
+                    .select('id, username, name, avatar_url')
+                    .in('id', idUserIds);
+                  if (idProfiles) idProfiles.forEach((p: any) => idProfilesMap[p.id] = p);
+                }
+
+                const identificationIds = identsData.map((it: any) => it.id).filter(Boolean);
+                if (identificationIds.length > 0) {
+                  const { data: votes } = await supabase
+                    .from('identification_votes')
+                    .select('id, identification_id, user_id, created_at')
+                    .in('identification_id', identificationIds);
+                  if (votes) {
+                    for (const v of votes) {
+                      identificationVotesMap[v.identification_id] = identificationVotesMap[v.identification_id] || [];
+                      identificationVotesMap[v.identification_id].push(v);
+                    }
+                  }
+                }
+              }
+
+              const enriched = {
+                ...data,
+                lepidoptera_image_url: lepImg ? lepImg.image_url : null,
+                plant_image_url: plantImg ? plantImg.image_url : null,
+                image_url: lepImg ? lepImg.image_url : (plantImg ? plantImg.image_url : null),
+                comments: formattedComments,
+                identifications: (identsData || []).map((it: any) => ({
+                  id: it.id,
+                  observation_id: it.observation_id,
+                  user_id: it.user_id,
+                  userName: idProfilesMap[it.user_id]?.username || idProfilesMap[it.user_id]?.name || null,
+                  userAvatar: idProfilesMap[it.user_id]?.avatar_url || null,
+                  species: it.species,
+                  scientific_name: it.scientific_name,
+                  identification_type: it.identification_type,
+                  is_verified: it.is_verified,
+                  created_at: it.created_at,
+                  createdAt: it.created_at,
+                  identification_votes: identificationVotesMap[it.id] || [],
+                  vote_count: (identificationVotesMap[it.id] || []).length,
+                })),
+              } as any;
+
+              return { success: true, data: enriched };
+            }
+          } catch (fallbackErr) {
+            // continue to return original function error below
+            console.warn('API client: observation endpoint returned error; Supabase fallback failed:', fallbackErr);
+          }
         }
 
         return {

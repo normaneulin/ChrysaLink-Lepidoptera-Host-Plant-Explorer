@@ -35,7 +35,7 @@ export function ObservationDetailModal({
   currentUserId,
   onUpdate
 }: ObservationDetailModalProps) {
-  // ...existing code...
+  
   // Fetch latest observation details
   const fetchObservationDetails = async () => {
     try {
@@ -518,13 +518,113 @@ export function ObservationDetailModal({
       toast.error('Please sign in to agree');
       return;
     }
+    // Guard: must be a persisted identification id
+    if (!identificationId || (String(identificationId).startsWith && String(identificationId).startsWith('local-'))) {
+      toast.error('Cannot agree to a non-persisted identification');
+      return;
+    }
     try {
       const resp = await apiClient.post('/agree-identification', { identification_id: identificationId }, accessToken);
+      // If edge function succeeded, verify by refreshing and checking votes
       if (resp && resp.success) {
-        toast.success('Agreed!');
         // Refresh observation and comments
         await fetchObservationDetails();
         await fetchCommentsFromSupabase();
+
+        // Verify the vote is present in refreshed data
+        try {
+          const ident = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId));
+          const votesArr = ident?.votes || ident?.identification_votes || [];
+          const hasVote = Array.isArray(votesArr) && votesArr.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
+          if (!hasVote) {
+            // Sometimes backend may return success for idempotent already-voted; still re-fetch directly
+            // Attempt one more refresh using apiClient.get (which has its own fallbacks)
+            await fetchObservationDetails();
+            const ident2 = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId));
+            const votesArr2 = ident2?.votes || ident2?.identification_votes || [];
+            const hasVote2 = Array.isArray(votesArr2) && votesArr2.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
+            if (!hasVote2) {
+              toast.error('Agree recorded but vote not visible; please check network or try again');
+            } else {
+              toast.success('Agreed!');
+            }
+          } else {
+            toast.success('Agreed!');
+          }
+        } catch (vErr) {
+          // Non-fatal
+          toast.success('Agreed!');
+        }
+
+        // Ensure identification row and vote exist in Supabase when possible.
+        // This helps for cases where the suggestion/agreement flow created an edge-backed suggestion
+        // but the corresponding records are not visible in the public `identifications` / `identification_votes` tables.
+        try {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
+          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+          if (supabaseUrl && supabaseAnonKey) {
+            const { createClient } = await import('@supabase/supabase-js');
+            const sb = createClient(supabaseUrl, supabaseAnonKey);
+
+            // Check if identification exists
+            let identExists = false;
+            try {
+              const { data: checkData, error: checkErr } = await sb.from('identifications').select('id').eq('id', identificationId).limit(1);
+              if (!checkErr && checkData && checkData.length > 0) identExists = true;
+            } catch (e) {
+              // ignore
+            }
+
+            // If identification does not exist, attempt to insert it based on localObservation's copy
+            let insertedIdent: any = null;
+            if (!identExists) {
+              const identLocal = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId)) || {};
+              const payload: any = {
+                observation_id: localObservation.id,
+                user_id: identLocal.user_id || identLocal.user?.id || currentUserId || null,
+                species: identLocal.species || identLocal.scientific_name || identLocal.scientificName || null,
+                scientific_name: identLocal.scientific_name || identLocal.scientificName || null,
+                caption: identLocal.caption || identLocal.reason || identLocal.explanation || null,
+                identification_type: identLocal.identification_type || identLocal.identificationType || (identLocal.subtype || identLocal.type) || 'lepidoptera',
+                is_auto_suggested: false,
+              };
+              try {
+                const { data: insertData, error: insertErr } = await sb.from('identifications').insert([payload]).select().limit(1).maybeSingle();
+                if (!insertErr && insertData) {
+                  insertedIdent = insertData;
+                }
+              } catch (ie) {
+                // ignore insertion errors
+              }
+            }
+
+            // Ensure the current user has a vote record for this identification
+            try {
+              // Get current session user from anon client (will return user if logged in)
+              const { data: userData } = await sb.auth.getUser();
+              const sessionUserId = userData?.user?.id || currentUserId;
+              if (sessionUserId) {
+                const targetIdentId = (insertedIdent && insertedIdent.id) ? insertedIdent.id : identificationId;
+                // Check existing vote
+                const { data: existingVote, error: existingVoteErr } = await sb.from('identification_votes').select('id').eq('identification_id', targetIdentId).eq('user_id', sessionUserId).limit(1);
+                if ((!existingVoteErr && (!existingVote || existingVote.length === 0))) {
+                  try {
+                    await sb.from('identification_votes').insert([{ identification_id: targetIdentId, user_id: sessionUserId }]);
+                  } catch (voteErr) {
+                    // ignore vote insertion errors
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+        } catch (e) {
+          // Non-fatal - log for debugging
+          // eslint-disable-next-line no-console
+          console.warn('Persist-agree fallback failed', e);
+        }
+
         // Also add a local identification-like activity so the agree appears in the Activity feed
         try {
           if (currentUserId) {
@@ -602,8 +702,90 @@ export function ObservationDetailModal({
         }
 
         onUpdate();
+        return;
       } else {
-        toast.error(resp?.error || 'Failed to agree');
+        // Try fallback: first attempt a direct PostgREST insert using the user's id/token
+        try {
+          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
+          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+          // If we have the current user id and an access token, try a direct REST insert
+          if (currentUserId && accessToken) {
+            try {
+              const restUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/identification_votes`;
+              const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'apikey': supabaseAnonKey,
+                'Authorization': `Bearer ${accessToken}`,
+                // Ask PostgREST to return the inserted row
+                'Prefer': 'return=representation',
+              };
+
+              const body = JSON.stringify([{ identification_id: identificationId, user_id: currentUserId }]);
+              const r = await fetch(restUrl, { method: 'POST', headers, body });
+              if (r.ok) {
+                // parse response; PostgREST returns an array of inserted rows
+                const inserted = await r.json().catch(() => null as any);
+                // Refresh and verify vote
+                await fetchObservationDetails();
+                await fetchCommentsFromSupabase();
+                const identAfter = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId));
+                const votesAfter = identAfter?.votes || identAfter?.identification_votes || [];
+                const hasVoteAfter = Array.isArray(votesAfter) && votesAfter.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
+                if (hasVoteAfter) {
+                  toast.success('Agreed!');
+                  onUpdate();
+                  return;
+                }
+                // If vote still not visible, continue to anon fallback
+                console.warn('Direct REST inserted but vote not visible after refresh', inserted);
+              }
+
+              // If the REST insert failed, log it and fall through to anon Supabase fallback
+              const text = await r.text().catch(() => '');
+              console.warn('Direct PostgREST vote insert failed', r.status, text);
+            } catch (restErr) {
+              console.warn('Direct PostgREST insert error; will try Supabase anon fallback', restErr);
+            }
+          }
+
+          // Supabase anon fallback: use anon client to insert identification vote (older fallback path)
+          const { createClient } = await import('@supabase/supabase-js');
+          const sb = createClient(supabaseUrl, supabaseAnonKey);
+
+          const { data: userData } = await sb.auth.getUser();
+          const user = userData?.user;
+          if (!user?.id) {
+            toast.error(resp?.error || 'Failed to agree');
+            return;
+          }
+
+          // Check existing vote
+          const { data: existingVote } = await sb.from('identification_votes').select('*').eq('identification_id', identificationId).eq('user_id', user.id).limit(1);
+          if (existingVote && existingVote.length > 0) {
+            toast.success('Already voted');
+            await fetchObservationDetails();
+            await fetchCommentsFromSupabase();
+            onUpdate();
+            return;
+          }
+
+          const { data: voteData, error: voteErr } = await sb.from('identification_votes').insert([{ identification_id: identificationId, user_id: user.id }]).select().single();
+          if (voteErr || !voteData) {
+            console.warn('Fallback vote insert failed', voteErr);
+            toast.error(resp?.error || 'Failed to agree');
+            return;
+          }
+
+          toast.success('Agreed!');
+          await fetchObservationDetails();
+          await fetchCommentsFromSupabase();
+          onUpdate();
+          return;
+        } catch (fallbackErr) {
+          console.error('Agree fallback error', fallbackErr);
+          toast.error(resp?.error || 'Failed to agree');
+        }
       }
     } catch (e: any) {
       toast.error(e.message || 'Failed to agree');
@@ -636,6 +818,68 @@ export function ObservationDetailModal({
     toast.success(`Suggested ${suggestType} ID: ${suggestSpecies}`);
     setSuggestSpecies('');
     setSuggestReason('');
+  };
+
+  // Helper to suggest an identification with fallback to direct Supabase insert
+  const suggestWithFallback = async (payload: any) => {
+    // Try edge function first when accessToken is present
+    if (accessToken) {
+      try {
+        // Debug: log minimal payload info
+        // eslint-disable-next-line no-console
+        console.debug('SuggestWithFallback: calling edge function for', { observation_id: payload.observation_id, species: payload.species, hasCaption: !!(payload.caption || payload.reason) });
+        const resp = await apiClient.post('/suggest-identification', payload, accessToken);
+        if (resp && resp.success) return resp;
+        // If the function call failed, fall through to Supabase fallback
+        console.warn('Edge suggest-identification failed, falling back to Supabase:', resp?.error);
+      } catch (err) {
+        console.warn('Edge suggest-identification request error, falling back to Supabase:', err);
+      }
+    }
+
+    // Supabase fallback: use anon client to insert identification and initial vote
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+      const { createClient } = await import('@supabase/supabase-js');
+      const sb = createClient(supabaseUrl, supabaseAnonKey);
+
+      // Get current user session
+      const { data: userData } = await sb.auth.getUser();
+      const user = userData?.user;
+      if (!user?.id) {
+        console.warn('No authenticated session for Supabase fallback — skipping identification insert');
+        return { success: false, error: 'Not authenticated for fallback' };
+      }
+
+      const identPayload: any = {
+        observation_id: payload.observation_id,
+        user_id: user.id,
+        species: payload.species,
+        scientific_name: payload.scientific_name || payload.sciname || null,
+        caption: payload.reason || payload.caption || null,
+        identification_type: payload.identification_type || payload.identificationType || 'lepidoptera',
+        is_auto_suggested: false,
+      };
+
+      const { data: identData, error: identErr } = await sb.from('identifications').insert([identPayload]).select().single();
+      if (identErr || !identData) {
+        console.warn('Supabase identifications insert error:', identErr);
+        return { success: false, error: identErr?.message || 'Failed to insert identification' };
+      }
+
+      // Add initial vote for the suggester
+      try {
+        await sb.from('identification_votes').insert([{ identification_id: identData.id, user_id: user.id }]);
+      } catch (voteErr) {
+        console.warn('Failed to insert initial identification vote in fallback:', voteErr);
+      }
+
+      return { success: true, data: identData };
+    } catch (fallbackErr) {
+      console.warn('Identification fallback failed:', fallbackErr);
+      return { success: false, error: fallbackErr?.message || 'Fallback failed' };
+    }
   };
 
   const handleDelete = async () => {
@@ -871,7 +1115,55 @@ export function ObservationDetailModal({
                     </>
                   )}
                 </div>
-                {/* Community Agree button removed — consensus is shown but agreeing happens on individual suggestions */}
+                <div className="ml-4 flex-shrink-0">
+                  {/* Accept community taxon: owner-only action that writes to observation */}
+                  {localObservation.user && currentUserId === localObservation.user.id ? (
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="text-xs text-gray-500">Owner Actions</div>
+                      <Button
+                        size="sm"
+                        onClick={async () => {
+                          if (!accessToken) {
+                            toast.error('Please sign in to accept community taxon');
+                            return;
+                          }
+                          // Determine value to write
+                          const fieldName = suggestType === 'lepidoptera' ? 'lepidoptera_current_identification' : 'plant_current_identification';
+                          const valueToSet = (communityForType.level === 'species' && topCommunityTaxon) ? topCommunityTaxon.species : communityForType.name;
+                          if (!valueToSet) {
+                            toast.error('No community taxon to accept');
+                            return;
+                          }
+                          // Only allow clicking when there are >=3 supporting IDs
+                          const supportCount = communityForType.count || 0;
+                          if (supportCount < 3) {
+                            toast.error('Community taxon requires 3+ supporting identifications to accept');
+                            return;
+                          }
+                          try {
+                            const payload: any = {};
+                            payload[fieldName] = valueToSet;
+                            const resp = await apiClient.put(`/observations/${localObservation.id}`, payload, accessToken);
+                            if (resp && resp.success) {
+                              toast.success('Community taxon accepted');
+                              await fetchObservationDetails();
+                              await fetchCommentsFromSupabase();
+                              onUpdate();
+                            } else {
+                              toast.error(resp?.error || 'Failed to accept community taxon');
+                            }
+                          } catch (e: any) {
+                            toast.error(e?.message || 'Failed to accept community taxon');
+                          }
+                        }}
+                        disabled={!accessToken || !communityForType || (communityForType.count || 0) < 3}
+                      >
+                        Accept
+                      </Button>
+                      <div className="text-xs text-gray-400">Requires 3+ supporting IDs</div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <div>
@@ -932,7 +1224,12 @@ export function ObservationDetailModal({
                             <div className="text-right">
                               <div className="text-xs text-gray-500 mb-2">{item.subtype === 'hostPlant' || item.type === 'hostPlant' ? 'Host Plant' : 'Lepidoptera'}</div>
                               {item.userId !== currentUserId && (
-                                <Button size="sm" onClick={() => handleAgreeIdentification(item.id)} disabled={!accessToken || item.userVoted}>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAgreeIdentification(item.id)}
+                                  disabled={!accessToken || item.userVoted || !item.id || (String(item.id).startsWith && String(item.id).startsWith('local-'))}
+                                  title={!item.id || (String(item.id).startsWith && String(item.id).startsWith('local-')) ? 'Identification not yet persisted' : undefined}
+                                >
                                   {item.userVoted ? 'Agreed' : 'Agree'}
                                 </Button>
                               )}
@@ -1067,11 +1364,8 @@ export function ObservationDetailModal({
                       }
 
                       try {
-                        // Debug: log payload being sent so we can confirm caption is present
-                        // (avoid logging tokens)
-                        // eslint-disable-next-line no-console
-                        console.debug('Suggest-identification payload ->', { observation_id: payload.observation_id, species: payload.species, captionProvided: !!payload.caption });
-                        const resp = await apiClient.post('/suggest-identification', payload, accessToken);
+                        // Use suggestWithFallback so suggestions persist even if edge function is unavailable
+                        const resp = await suggestWithFallback(payload);
                         if (resp && resp.success) {
                           toast.success('Suggestion submitted');
                           setSuggestSearch('');
