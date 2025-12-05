@@ -1,61 +1,102 @@
+# ChrysaLink — Lepidoptera Host Plant Explorer
 
-  # ChrysaLink — Lepidoptera Host Plant Explorer
+<p align="center">
+  <img src="frontend/public/navbar/logo.svg" alt="ChrysaLink Logo" width="200"/>
+</p>
 
-  ![ChrysaLink logo](frontend/public/navbar/logo.svg)
+<p align="center">
+  <strong>An interactive web platform for exploring Lepidoptera species and their host plant relationships</strong>
+</p>
 
-  An interactive web explorer for Lepidoptera (butterflies and moths) and their host plants. ChrysaLink visualizes relationships between lepidoptera species and plants using curated datasets, interactive maps, and species pages — useful for researchers, educators, and nature enthusiasts.
+<p align="center">
+  <a href="https://chrysalink.vercel.app/">Live Site</a>
+</p>
 
-  Live site: https://chrysalink.vercel.app/
+---
 
-  **Quick Overview**
-  - **Purpose:** Explore host-plant relationships for Lepidoptera species with searchable pages and interactive visualizations.
-  - **Audience:** Biologists, ecologists, citizen scientists, educators, and hobbyists.
-  - **Status:** Website (informational and exploratory) — not a library or installable package.
+## Overview
 
-  **Hero / Screenshots**
+ChrysaLink is a comprehensive web explorer that visualizes the intricate relationships between Lepidoptera species (butterflies and moths) and their host plants. Built with curated datasets and interactive visualizations, the platform serves researchers, educators, citizen scientists, and nature enthusiasts seeking to understand these essential ecological connections.
 
-  ![Landing hero](frontend/public/landingpage_images/image1.svg)
+### Key Features
 
-  **What you’ll find here**
-  - Curated species and plant datasets used to power the explorer.
-  - Interactive map and relationship network visualizations.
-  - Searchable species pages with host plant lists and observations.
+- **Species Database**: Searchable repository of Lepidoptera species with detailed host plant information
+- **Interactive Visualizations**: Dynamic maps and network graphs illustrating species-plant relationships
+- **Observation Records**: Community-contributed sightings and occurrence data
+- **Educational Resources**: Accessible information for students, educators, and hobbyists
 
-  Technology
-  - Frontend: Vite + React/TypeScript (see `frontend/`)
-  - Backend: Node / Supabase functions & SQL data (see `backend/`)
-  - Data: CSV exports and curated datasets stored under `backend/data/`
+### Target Audience
 
-  How to preview locally
-  - This repository contains a website — to run a local development preview (if you want to work on the code):
+- Biologists and ecologists conducting research on pollinator-plant interactions
+- Educators developing curriculum on ecosystem relationships
+- Citizen scientists contributing to biodiversity monitoring
+- Gardeners and conservationists interested in native plantings
 
-  ```pwsh
-  cd frontend
-  npm install
-  npm run dev
-  ```
+## Technology Stack
 
-  Open the UI at the local dev URL printed by Vite (usually `http://localhost:5173`). Note: this repo is primarily informational; the live site is the main entrypoint.
+- **Frontend**: Vite, React, TypeScript
+- **Backend**: Supabase (PostgreSQL database, Edge Functions)
+- **Data Processing**: Node.js, CSV datasets
+- **Deployment**: Vercel
 
-  Assets used in this README
-  - Logo: `frontend/public/navbar/logo.svg` and `frontend/public/navbar/logo.png`
-  - Footer logo: `frontend/public/footer/footer_logo.svg`
-  - Landing images: `frontend/public/landingpage_images/*`
+## Repository Structure
+```
+├── frontend/          # React application source code
+├── backend/           # Supabase functions and database schemas
+│   ├── data/         # Curated datasets (CSV format)
+│   └── docs/         # Database documentation and SQL schemas
+```
 
-  Contributing
-  - Found an issue or want to improve the UI or data? Open an issue or a pull request with a clear description and reproduction steps.
-  - Data contributions: add CSVs or suggested improvements to the `backend/data/` directory and include sources/credits.
+## Local Development
 
-  Credits & Data Sources
-  - See `backend/docs/supabase_db.sql` and `backend/data/` for data layout and attribution.
+To run a local development environment:
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-  License
-  - Check the repository root for license information. If none is present, please contact the maintainers before reusing data or assets.
+The development server will start at `http://localhost:5173` (or another available port).
 
-  Contact
-  - Project homepage: https://chrysalink.vercel.app/
-  - For questions or collaboration, open an issue in this repository.
+**Note**: This repository contains the source code for the production website. For general exploration of species and host plant data, visit the [live site](https://chrysalink.vercel.app/).
 
-  ---
-  _This README is focused on presenting the website and how to preview or contribute._
-  
+## Contributing
+
+We welcome contributions from the community! Here's how you can help:
+
+### Reporting Issues
+Open an issue with a clear description, steps to reproduce, and expected vs. actual behavior.
+
+### Code Contributions
+Submit pull requests with:
+- Clear description of changes
+- Relevant issue references
+- Updated documentation if applicable
+
+### Data Contributions
+To improve or expand the dataset:
+1. Add or modify CSV files in `backend/data/`
+2. Include proper citations and data sources
+3. Follow the schema documented in `backend/docs/supabase_db.sql`
+
+## Data Sources & Attribution
+
+Dataset documentation, sources, and attribution information can be found in:
+- `backend/docs/supabase_db.sql` — Database schema and structure
+- `backend/data/` — Raw datasets with source citations
+
+## License
+
+Please refer to the LICENSE file in the repository root. For questions about data usage or commercial applications, contact the maintainers via GitHub issues.
+
+## Contact
+
+- **Website**: [chrysalink.vercel.app](https://chrysalink.vercel.app/)
+- **Issues & Questions**: Open an issue in this repository
+- **Collaboration Inquiries**: Contact via GitHub issues
+
+---
+
+<p align="center">
+  <em>ChrysaLink is dedicated to making Lepidoptera ecology accessible and discoverable.</em>
+</p>

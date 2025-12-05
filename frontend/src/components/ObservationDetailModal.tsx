@@ -261,6 +261,7 @@ export function ObservationDetailModal({
   const [comment, setComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localObservation, setLocalObservation] = useState(observation);
+  const [isAccepting, setIsAccepting] = useState(false);
   
   // Suggestion State
   const [suggestSpecies, setSuggestSpecies] = useState('');
@@ -357,6 +358,16 @@ export function ObservationDetailModal({
         votes: votesArr,
         voteCount,
         userVoted,
+        // Mark if this identification matches the observation's current accepted identification
+        matchesAccepted: (() => {
+          const accepted = subtype === 'hostPlant' ? localObservation.plant_current_identification : localObservation.lepidoptera_current_identification;
+          if (!accepted) return false;
+          try {
+            return String(accepted) === String(i.species) || String(accepted) === String(i.scientific_name) || String(accepted) === String(i.common_name) || String(accepted) === String(i.scientificName);
+          } catch (e) {
+            return false;
+          }
+        })(),
       };
     });
     return [...comments, ...identifications].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -504,7 +515,14 @@ export function ObservationDetailModal({
   const thresholdByIds = totalIdentificationsForType > 0 ? Math.ceil((2 / 3) * totalIdentificationsForType) : 1;
   // Community taxon computed by rules (species 2/3 majority OR unanimous genus/family)
   const communityForType = communityCandidates?.communityByType ? communityCandidates.communityByType[suggestType] : null;
+  // Accept threshold: require at least 3 supporting identifications for owner to accept
+  const acceptThreshold = 3;
   const isTopVerified = !!communityForType; // community established according to rules
+  // Value representing the community taxon (species name or genus/family name)
+  const communityValue = communityForType ? ((communityForType.level === 'species' && topCommunityTaxon) ? topCommunityTaxon.species : communityForType.name) : null;
+  // Current accepted value on the observation for this suggestType
+  const acceptedValue = suggestType === 'lepidoptera' ? localObservation.lepidoptera_current_identification : localObservation.plant_current_identification;
+  const alreadyAcceptedForCommunity = !!acceptedValue && !!communityValue && String(acceptedValue) === String(communityValue);
   // Prepare segments for display bar (percent widths)
   const voteSegments = candidatesForType.map((c: any, idx: number) => ({
     ...c,
@@ -527,33 +545,57 @@ export function ObservationDetailModal({
       const resp = await apiClient.post('/agree-identification', { identification_id: identificationId }, accessToken);
       // If edge function succeeded, verify by refreshing and checking votes
       if (resp && resp.success) {
-        // Refresh observation and comments
-        await fetchObservationDetails();
-        await fetchCommentsFromSupabase();
-
-        // Verify the vote is present in refreshed data
+        // Try to verify using a fresh API response to avoid checking stale React state
+        let freshResp: any = null;
         try {
-          const ident = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId));
-          const votesArr = ident?.votes || ident?.identification_votes || [];
-          const hasVote = Array.isArray(votesArr) && votesArr.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
-          if (!hasVote) {
-            // Sometimes backend may return success for idempotent already-voted; still re-fetch directly
-            // Attempt one more refresh using apiClient.get (which has its own fallbacks)
+          freshResp = await apiClient.get(`/observations/${observation.id}`, accessToken);
+          if (freshResp && freshResp.success && freshResp.data) {
+            setLocalObservation(freshResp.data);
+          } else {
+            // fallback to existing helper if apiClient.get failed for some reason
             await fetchObservationDetails();
-            const ident2 = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId));
-            const votesArr2 = ident2?.votes || ident2?.identification_votes || [];
-            const hasVote2 = Array.isArray(votesArr2) && votesArr2.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
-            if (!hasVote2) {
-              toast.error('Agree recorded but vote not visible; please check network or try again');
+          }
+          // Always refresh comments
+          await fetchCommentsFromSupabase();
+
+          // Choose the freshest source available for verification
+          const source = (freshResp && freshResp.success && freshResp.data) ? freshResp.data : localObservation;
+          try {
+            const ident = (source.identifications || []).find((it: any) => String(it.id) === String(identificationId));
+            const votesArr = ident?.votes || ident?.identification_votes || [];
+            const hasVote = Array.isArray(votesArr) && votesArr.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
+            if (!hasVote) {
+              // Try one more direct read (in case of transient eventual consistency)
+              try {
+                const fresh2 = await apiClient.get(`/observations/${observation.id}`, accessToken);
+                if (fresh2 && fresh2.success && fresh2.data) {
+                  setLocalObservation(fresh2.data);
+                  const ident2 = (fresh2.data.identifications || []).find((it: any) => String(it.id) === String(identificationId));
+                  const votesArr2 = ident2?.votes || ident2?.identification_votes || [];
+                  const hasVote2 = Array.isArray(votesArr2) && votesArr2.find((v: any) => String(v.user_id || v.userId || v.user) === String(currentUserId));
+                  if (!hasVote2) {
+                    toast.error('Agree recorded but vote not visible; please check network or try again');
+                  } else {
+                    toast.success('Agreed!');
+                  }
+                } else {
+                  toast.error('Agree recorded but vote not visible; please check network or try again');
+                }
+              } catch (e) {
+                toast.error('Agree recorded but vote not visible; please check network or try again');
+              }
             } else {
               toast.success('Agreed!');
             }
-          } else {
+          } catch (vErr) {
+            // non-fatal; optimistic success
             toast.success('Agreed!');
           }
-        } catch (vErr) {
-          // Non-fatal
-          toast.success('Agreed!');
+        } catch (e) {
+          // If verification attempted and failed, warn but don't block the UX
+          // eslint-disable-next-line no-console
+          console.warn('Agree verification error', e);
+          toast.error('Agree recorded but vote not visible; please check network or try again');
         }
 
         // Ensure persisted identification and vote exist in Supabase (same logic as Suggest)
@@ -734,6 +776,56 @@ export function ObservationDetailModal({
       }
     } catch (e: any) {
       toast.error(e.message || 'Failed to agree');
+    }
+  };
+
+  // Owner action: accept current community taxon and write it to the observation
+  const handleAcceptCommunityTaxon = async (community: any) => {
+    if (!accessToken) {
+      toast.error('Please sign in to accept community taxon');
+      return;
+    }
+
+    if (!community) {
+      toast.error('No community taxon to accept');
+      return;
+    }
+
+    const fieldName = suggestType === 'lepidoptera' ? 'lepidoptera_current_identification' : 'plant_current_identification';
+    const valueToSet = (community.level === 'species' && topCommunityTaxon) ? topCommunityTaxon.species : community.name;
+    if (!valueToSet) {
+      toast.error('No community taxon to accept');
+      return;
+    }
+
+    // compute threshold and ensure community meets the owner-accept requirement
+    const supportCount = community.count || 0;
+    if (supportCount < acceptThreshold) {
+      toast.error(`Community taxon requires ${acceptThreshold}+ supporting identifications to accept`);
+      return;
+    }
+
+    // Optimistic accept: mark as accepting and update local state immediately
+    setIsAccepting(true);
+    try {
+      // Optimistically set the accepted value so the Accept button becomes disabled immediately
+      setLocalObservation((prev: any) => ({ ...(prev || {}), [fieldName]: valueToSet }));
+
+      const payload: any = {};
+      payload[fieldName] = valueToSet;
+      const resp = await apiClient.put(`/observations/${localObservation.id}`, payload, accessToken);
+      if (resp && resp.success) {
+        toast.success('Community taxon accepted');
+        await fetchObservationDetails();
+        await fetchCommentsFromSupabase();
+        onUpdate();
+      } else {
+        toast.error(resp?.error || 'Failed to accept community taxon');
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to accept community taxon');
+    } finally {
+      setIsAccepting(false);
     }
   };
 
@@ -1247,7 +1339,7 @@ export function ObservationDetailModal({
                       <div className="text-sm text-gray-600 mt-2">{topCommunityTaxon.count} vote(s)</div>
                       <div className="mt-3">
                         <div className="text-sm text-gray-600">
-                          {totalIdentificationsForType} total ID(s) — consensus threshold: {thresholdByIds} vote(s) (2/3)
+                          {totalIdentificationsForType} total ID(s) — consensus threshold for owner accept: {acceptThreshold} vote(s)
                         </div>
                       </div>
                     </>
@@ -1267,43 +1359,15 @@ export function ObservationDetailModal({
                       <div className="text-xs text-gray-500">Owner Actions</div>
                       <Button
                         size="sm"
-                        onClick={async () => {
-                          if (!accessToken) {
-                            toast.error('Please sign in to accept community taxon');
-                            return;
-                          }
-                          // Determine value to write
-                          const fieldName = suggestType === 'lepidoptera' ? 'lepidoptera_current_identification' : 'plant_current_identification';
-                          const valueToSet = (communityForType.level === 'species' && topCommunityTaxon) ? topCommunityTaxon.species : communityForType.name;
-                          if (!valueToSet) {
-                            toast.error('No community taxon to accept');
-                            return;
-                          }
-                          // Only allow clicking when there are >=3 supporting IDs
-                          const supportCount = communityForType.count || 0;
-                          if (supportCount < 3) {
-                            toast.error('Community taxon requires 3+ supporting identifications to accept');
-                            return;
-                          }
-                          try {
-                            const payload: any = {};
-                            payload[fieldName] = valueToSet;
-                            const resp = await apiClient.put(`/observations/${localObservation.id}`, payload, accessToken);
-                            if (resp && resp.success) {
-                              toast.success('Community taxon accepted');
-                              await fetchObservationDetails();
-                              await fetchCommentsFromSupabase();
-                              onUpdate();
-                            } else {
-                              toast.error(resp?.error || 'Failed to accept community taxon');
-                            }
-                          } catch (e: any) {
-                            toast.error(e?.message || 'Failed to accept community taxon');
-                          }
-                        }}
-                        disabled={!accessToken || !communityForType || (communityForType.count || 0) < 3}
+                        onClick={() => handleAcceptCommunityTaxon(communityForType)}
+                        disabled={!accessToken || !communityForType || (communityForType.count || 0) < acceptThreshold || isAccepting || alreadyAcceptedForCommunity}
+                        title={
+                          alreadyAcceptedForCommunity
+                            ? 'You have already accepted this community taxon'
+                            : (!accessToken ? 'Please sign in to accept' : undefined)
+                        }
                       >
-                        Accept
+                        {isAccepting ? 'Accepting...' : 'Accept'}
                       </Button>
                       <div className="text-xs text-gray-400">Requires 3+ supporting IDs</div>
                     </div>
@@ -1316,7 +1380,7 @@ export function ObservationDetailModal({
                 <div className="text-lg font-bold text-gray-900 mt-1">Not yet identified</div>
                 <div className="text-xs text-gray-500 italic">No suggestions yet for {suggestType === 'lepidoptera' ? 'Lepidoptera' : 'Host Plant'}</div>
                 <div className="text-sm font-medium text-gray-700 mt-2">0 vote(s)</div>
-                <div className="text-xs text-gray-500">Consensus threshold: {thresholdByIds} / {totalIdentificationsForType} (2/3)</div>
+                      <div className="text-xs text-gray-500">Consensus threshold for owner accept: {acceptThreshold} / {totalIdentificationsForType}</div>
               </div>
             )}
           </div>
@@ -1372,8 +1436,12 @@ export function ObservationDetailModal({
                                 <Button
                                   size="sm"
                                   onClick={() => handleAgreeIdentification(item.id)}
-                                  disabled={!accessToken || item.userVoted || !item.id || (String(item.id).startsWith && String(item.id).startsWith('local-'))}
-                                  title={!item.id || (String(item.id).startsWith && String(item.id).startsWith('local-')) ? 'Identification not yet persisted' : undefined}
+                                  disabled={!accessToken || item.userVoted || !item.id || (String(item.id).startsWith && String(item.id).startsWith('local-')) || (currentUserId === localObservation?.user?.id && item.matchesAccepted)}
+                                  title={
+                                    (currentUserId === localObservation?.user?.id && item.matchesAccepted)
+                                      ? 'This identification matches your accepted identification (owner)'
+                                      : (!item.id || (String(item.id).startsWith && String(item.id).startsWith('local-')) ? 'Identification not yet persisted' : undefined)
+                                  }
                                 >
                                   {item.userVoted ? 'Agreed' : 'Agree'}
                                 </Button>

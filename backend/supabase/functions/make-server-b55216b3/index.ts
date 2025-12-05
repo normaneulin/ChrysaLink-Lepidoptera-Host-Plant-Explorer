@@ -12,6 +12,9 @@ Deno.serve(async (req) => {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+    // Allow credentials for auth flows if callers use cookies; Vary by Origin when not using '*'
+    'Access-Control-Allow-Credentials': 'true',
+    'Vary': 'Origin',
   };
 
   // Handle CORS preflight
@@ -65,6 +68,56 @@ Deno.serve(async (req) => {
           JSON.stringify({ success: false, error: e.message }),
           { status: 500, headers }
         );
+      }
+    }
+
+    // --- Observation Update (owner-only) ---
+    if (path.match(/^\/observations\/[\w-]+$/) && req.method === 'PUT') {
+      try {
+        const obsId = path.split('/')[2];
+        const body = await req.json();
+
+        const authHeader = req.headers.get('Authorization');
+        if (!authHeader) {
+          return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401, headers });
+        }
+        const token = authHeader.replace('Bearer ', '');
+
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+        if (userError || !user) {
+          return new Response(JSON.stringify({ success: false, error: 'Invalid token' }), { status: 401, headers });
+        }
+
+        // Only allow owner to update these fields
+        const allowed: Record<string, any> = {};
+        if (typeof body.lepidoptera_current_identification !== 'undefined') allowed.lepidoptera_current_identification = body.lepidoptera_current_identification;
+        if (typeof body.plant_current_identification !== 'undefined') allowed.plant_current_identification = body.plant_current_identification;
+
+        if (Object.keys(allowed).length === 0) {
+          return new Response(JSON.stringify({ success: false, error: 'No updatable fields provided' }), { status: 400, headers });
+        }
+
+        // Verify ownership
+        const { data: obs, error: obsErr } = await supabase.from('observations').select('id, user_id').eq('id', obsId).single();
+        if (obsErr || !obs) {
+          return new Response(JSON.stringify({ success: false, error: obsErr?.message || 'Observation not found' }), { status: 404, headers });
+        }
+        if (String(obs.user_id) !== String(user.id)) {
+          return new Response(JSON.stringify({ success: false, error: 'Forbidden' }), { status: 403, headers });
+        }
+
+        const { data: updated, error: updateErr } = await supabase.from('observations').update(allowed).eq('id', obsId).select().single();
+        if (updateErr) {
+          return new Response(JSON.stringify({ success: false, error: updateErr.message || 'Failed to update observation' }), { status: 500, headers });
+        }
+
+        return new Response(JSON.stringify({ success: true, data: updated }), { status: 200, headers });
+      } catch (e) {
+        return new Response(JSON.stringify({ success: false, error: e?.message || String(e) }), { status: 500, headers });
       }
     }
 
