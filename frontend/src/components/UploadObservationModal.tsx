@@ -247,14 +247,31 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                 is_auto_suggested: false,
               };
 
-              const { data: identData, error: identErr } = await sb.from('identifications').insert([identPayload]).select().single();
-              if (identErr || !identData) {
+              // Avoid requesting returned representation on insert to prevent PostgREST `columns=` behavior
+              const { error: identErr } = await sb.from('identifications').insert([identPayload]);
+              let identData: any = null;
+              if (identErr) {
                 console.warn('Supabase identifications insert error:', identErr);
                 return null;
               }
+              try {
+                const { data: fetched, error: fetchErr } = await sb.from('identifications')
+                  .select('*')
+                  .eq('observation_id', identPayload.observation_id)
+                  .eq('user_id', identPayload.user_id)
+                  .eq('species', identPayload.species)
+                  .order('created_at', { ascending: false })
+                  .limit(1)
+                  .maybeSingle();
+                if (!fetchErr && fetched) identData = fetched;
+              } catch (e) {
+                // ignore
+              }
+              if (!identData) return null;
 
               // Add initial vote for the suggester
               try {
+                console.debug('Inserting identification_vote (upload fallback) for ident', identData?.id, 'user', user?.id, '\nstack:', new Error().stack);
                 await sb.from('identification_votes').insert([{ identification_id: identData.id, user_id: user.id }]);
               } catch (voteErr) {
                 console.warn('Failed to insert initial identification vote in fallback:', voteErr);

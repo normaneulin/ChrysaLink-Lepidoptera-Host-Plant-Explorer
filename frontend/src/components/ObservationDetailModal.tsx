@@ -556,73 +556,13 @@ export function ObservationDetailModal({
           toast.success('Agreed!');
         }
 
-        // Ensure identification row and vote exist in Supabase when possible.
-        // This helps for cases where the suggestion/agreement flow created an edge-backed suggestion
-        // but the corresponding records are not visible in the public `identifications` / `identification_votes` tables.
+        // Ensure persisted identification and vote exist in Supabase (same logic as Suggest)
         try {
-          const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
-          const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-          if (supabaseUrl && supabaseAnonKey) {
-            const { createClient } = await import('@supabase/supabase-js');
-            const sb = createClient(supabaseUrl, supabaseAnonKey);
-
-            // Check if identification exists
-            let identExists = false;
-            try {
-              const { data: checkData, error: checkErr } = await sb.from('identifications').select('id').eq('id', identificationId).limit(1);
-              if (!checkErr && checkData && checkData.length > 0) identExists = true;
-            } catch (e) {
-              // ignore
-            }
-
-            // If identification does not exist, attempt to insert it based on localObservation's copy
-            let insertedIdent: any = null;
-            if (!identExists) {
-              const identLocal = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId)) || {};
-              const payload: any = {
-                observation_id: localObservation.id,
-                user_id: identLocal.user_id || identLocal.user?.id || currentUserId || null,
-                species: identLocal.species || identLocal.scientific_name || identLocal.scientificName || null,
-                scientific_name: identLocal.scientific_name || identLocal.scientificName || null,
-                caption: identLocal.caption || identLocal.reason || identLocal.explanation || null,
-                identification_type: identLocal.identification_type || identLocal.identificationType || (identLocal.subtype || identLocal.type) || 'lepidoptera',
-                is_auto_suggested: false,
-              };
-              try {
-                const { data: insertData, error: insertErr } = await sb.from('identifications').insert([payload]).select().limit(1).maybeSingle();
-                if (!insertErr && insertData) {
-                  insertedIdent = insertData;
-                }
-              } catch (ie) {
-                // ignore insertion errors
-              }
-            }
-
-            // Ensure the current user has a vote record for this identification
-            try {
-              // Get current session user from anon client (will return user if logged in)
-              const { data: userData } = await sb.auth.getUser();
-              const sessionUserId = userData?.user?.id || currentUserId;
-              if (sessionUserId) {
-                const targetIdentId = (insertedIdent && insertedIdent.id) ? insertedIdent.id : identificationId;
-                // Check existing vote
-                const { data: existingVote, error: existingVoteErr } = await sb.from('identification_votes').select('id').eq('identification_id', targetIdentId).eq('user_id', sessionUserId).limit(1);
-                if ((!existingVoteErr && (!existingVote || existingVote.length === 0))) {
-                  try {
-                    await sb.from('identification_votes').insert([{ identification_id: targetIdentId, user_id: sessionUserId }]);
-                  } catch (voteErr) {
-                    // ignore vote insertion errors
-                  }
-                }
-              }
-            } catch (e) {
-              // ignore
-            }
-          }
+          await persistIdentificationAndVote(identificationId);
         } catch (e) {
-          // Non-fatal - log for debugging
+          // non-fatal
           // eslint-disable-next-line no-console
-          console.warn('Persist-agree fallback failed', e);
+          console.warn('persistIdentificationAndVote error', e);
         }
 
         // Also add a local identification-like activity so the agree appears in the Activity feed
@@ -717,8 +657,6 @@ export function ObservationDetailModal({
                 'Content-Type': 'application/json',
                 'apikey': supabaseAnonKey,
                 'Authorization': `Bearer ${accessToken}`,
-                // Ask PostgREST to return the inserted row
-                'Prefer': 'return=representation',
               };
 
               const body = JSON.stringify([{ identification_id: identificationId, user_id: currentUserId }]);
@@ -770,9 +708,16 @@ export function ObservationDetailModal({
             return;
           }
 
-          const { data: voteData, error: voteErr } = await sb.from('identification_votes').insert([{ identification_id: identificationId, user_id: user.id }]).select().single();
-          if (voteErr || !voteData) {
-            console.warn('Fallback vote insert failed', voteErr);
+          // Insert vote (no .select() to avoid PostgREST `columns=` behavior under RLS)
+          try {
+            const { error: voteErr } = await sb.from('identification_votes').insert([{ identification_id: identificationId, user_id: user.id }]);
+            if (voteErr) {
+              console.warn('Fallback vote insert failed', voteErr);
+              toast.error(resp?.error || 'Failed to agree');
+              return;
+            }
+          } catch (ie) {
+            console.warn('Fallback vote insert exception', ie);
             toast.error(resp?.error || 'Failed to agree');
             return;
           }
@@ -862,18 +807,39 @@ export function ObservationDetailModal({
         is_auto_suggested: false,
       };
 
-      const { data: identData, error: identErr } = await sb.from('identifications').insert([identPayload]).select().single();
-      if (identErr || !identData) {
+      // Insert without requesting returned representation to avoid PostgREST `columns=` behavior under RLS
+      const { error: identErr } = await sb.from('identifications').insert([identPayload]);
+      let identData: any = null;
+      if (identErr) {
         console.warn('Supabase identifications insert error:', identErr);
         return { success: false, error: identErr?.message || 'Failed to insert identification' };
       }
+      // Best-effort: fetch the newly created identification so callers can use it
+      try {
+        const { data: fetched, error: fetchErr } = await sb.from('identifications')
+          .select('*')
+          .eq('observation_id', identPayload.observation_id)
+          .eq('user_id', identPayload.user_id)
+          .eq('species', identPayload.species)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!fetchErr && fetched) identData = fetched;
+      } catch (e) {
+        // ignore
+      }
+      if (!identData) {
+        // If we couldn't fetch the created row, still treat the insert as success (vote insertion will be best-effort)
+        return { success: true, data: null };
+      }
 
       // Add initial vote for the suggester
-      try {
-        await sb.from('identification_votes').insert([{ identification_id: identData.id, user_id: user.id }]);
-      } catch (voteErr) {
-        console.warn('Failed to insert initial identification vote in fallback:', voteErr);
-      }
+            try {
+              console.debug('Inserting identification_vote (fallback) for ident', identData?.id, 'user', user?.id, '\nstack:', new Error().stack);
+              await sb.from('identification_votes').insert([{ identification_id: identData.id, user_id: user.id }]);
+            } catch (voteErr) {
+              console.warn('Failed to insert initial identification vote in fallback:', voteErr);
+            }
 
       return { success: true, data: identData };
     } catch (fallbackErr) {
@@ -881,6 +847,200 @@ export function ObservationDetailModal({
       return { success: false, error: fallbackErr?.message || 'Fallback failed' };
     }
   };
+
+  // Persist an identification (if missing) and add a vote for the current user.
+  // Reuses the same Supabase anon-client fallback approach used by suggestWithFallback.
+  async function persistIdentificationAndVote(identificationId: string) {
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co`;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+      if (!supabaseUrl || !supabaseAnonKey) return;
+
+      const { createClient } = await import('@supabase/supabase-js');
+      const sb = createClient(supabaseUrl, supabaseAnonKey);
+
+      // Resolve current user id (prefer prop, else supabase session)
+      let sessionUserId: string | null = currentUserId || null;
+      try {
+        if (!sessionUserId) {
+          const { data: ud } = await sb.auth.getUser();
+          sessionUserId = ud?.user?.id || null;
+        }
+      } catch (e) {
+        // ignore
+      }
+      if (!sessionUserId) return;
+
+      // 1) Check if vote already exists. Prefer PostgREST GET with accessToken if available (avoids RLS surprises), else use anon client.
+      let voteExists = false;
+      if (accessToken) {
+        try {
+          const checkUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/identification_votes?identification_id=eq.${encodeURIComponent(String(identificationId))}&user_id=eq.${encodeURIComponent(String(sessionUserId))}&select=id`;
+          const headers: Record<string, string> = { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${accessToken}` };
+          const r = await fetch(checkUrl, { method: 'GET', headers });
+          if (r.ok) {
+            const j = await r.json().catch(() => null as any);
+            voteExists = Array.isArray(j) && j.length > 0;
+          }
+        } catch (e) {
+          // ignore and fallback
+        }
+      }
+
+      if (!voteExists) {
+        try {
+          const { data: existingVote, error: existingVoteErr } = await sb.from('identification_votes').select('id').eq('identification_id', identificationId).eq('user_id', sessionUserId).limit(1);
+          if (!existingVoteErr && existingVote && existingVote.length > 0) voteExists = true;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      // 2) If vote missing, insert it (prefer PostgREST with token, else anon insert)
+      if (!voteExists) {
+        let insertedVote = false;
+        if (accessToken) {
+          try {
+            const restUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/identification_votes`;
+            const headers: Record<string, string> = {
+              'Content-Type': 'application/json',
+              'apikey': supabaseAnonKey,
+              'Authorization': `Bearer ${accessToken}`,
+            };
+            const body = JSON.stringify([{ identification_id: identificationId, user_id: sessionUserId }]);
+            const r = await fetch(restUrl, { method: 'POST', headers, body });
+            if (r.ok || r.status === 409) insertedVote = true;
+          } catch (e) {
+            // ignore
+          }
+        }
+        if (!insertedVote) {
+            try {
+              console.debug('Inserting identification_vote (persistIdentificationAndVote) for ident', identificationId, 'user', sessionUserId, '\nstack:', new Error().stack);
+              const { error: verr } = await sb.from('identification_votes').insert([{ identification_id: identificationId, user_id: sessionUserId }]);
+              if (!verr) insertedVote = true;
+            } catch (e) {
+              // ignore duplicate or permission errors
+            }
+        }
+      }
+
+      // 3) Ensure an `identifications` row exists for this user/species on the observation (same behavior as Suggest)
+      // Find original identification to copy species/scientific name/type
+      const orig = (localObservation.identifications || []).find((it: any) => String(it.id) === String(identificationId)) || {};
+      const speciesVal = orig.species || orig.scientific_name || orig.scientificName || null;
+      const scientificVal = orig.scientific_name || orig.scientificName || null;
+      const identTypeVal = orig.identification_type || orig.identificationType || (orig.subtype || orig.type) || 'lepidoptera';
+
+      if (speciesVal) {
+        // Check for existing identification for this user/observation/species
+        let identExists = false;
+        if (accessToken) {
+          try {
+            const q = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/identifications?observation_id=eq.${encodeURIComponent(String(localObservation.id))}&user_id=eq.${encodeURIComponent(String(sessionUserId))}&species=eq.${encodeURIComponent(String(speciesVal))}&select=id`;
+            const headers: Record<string, string> = { 'apikey': supabaseAnonKey, 'Authorization': `Bearer ${accessToken}` };
+            const r = await fetch(q, { method: 'GET', headers });
+            if (r.ok) {
+              const j = await r.json().catch(() => null as any);
+              identExists = Array.isArray(j) && j.length > 0;
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        if (!identExists) {
+          try {
+            const { data: existingIdent, error: existingIdentErr } = await sb.from('identifications').select('id').eq('observation_id', localObservation.id).eq('user_id', sessionUserId).eq('species', speciesVal).limit(1);
+            if (!existingIdentErr && existingIdent && existingIdent.length > 0) identExists = true;
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        if (!identExists) {
+          // Insert identification: prefer server-side function `/suggest-identification` when we have an access token.
+          // This uses the service-role on the server and avoids RLS issues for client-side inserts.
+          let createdIdent: any = null;
+          if (accessToken && sessionUserId) {
+            try {
+              const payload = {
+                observation_id: localObservation.id,
+                species: speciesVal,
+                scientific_name: scientificVal || null,
+                identification_type: identTypeVal,
+              };
+              // Use apiClient post which wraps edge functions and falls back appropriately.
+              try {
+                const suggestResp = await apiClient.post('/suggest-identification', payload, accessToken);
+                if (suggestResp && suggestResp.success && suggestResp.data) {
+                  createdIdent = suggestResp.data;
+                }
+              } catch (af) {
+                // ignore and fallback to anon client
+              }
+            } catch (e) {
+              // ignore and fallback
+            }
+          }
+
+          if (!createdIdent) {
+            // Fallback to anon client insert + fetch (best-effort)
+            try {
+              const { error: insErr } = await sb.from('identifications').insert([{
+                observation_id: localObservation.id,
+                user_id: sessionUserId,
+                species: speciesVal,
+                scientific_name: scientificVal,
+                caption: null,
+                identification_type: identTypeVal,
+                is_auto_suggested: false,
+              }]);
+              if (!insErr) {
+                try {
+                  const { data: fetched, error: fetchErr } = await sb.from('identifications')
+                    .select('id, observation_id, user_id, species, scientific_name, identification_type, created_at')
+                    .eq('observation_id', localObservation.id)
+                    .eq('user_id', sessionUserId)
+                    .eq('species', speciesVal)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+                  if (!fetchErr && fetched) createdIdent = fetched;
+                } catch (e) {
+                  // ignore
+                }
+              }
+            } catch (ie) {
+              // ignore
+            }
+          }
+
+          // If created, add initial vote to the new identification if not already present
+          if (createdIdent && createdIdent.id) {
+            try {
+              // check vote existence on new ident
+              const { data: ev, error: evErr } = await sb.from('identification_votes').select('id').eq('identification_id', createdIdent.id).eq('user_id', sessionUserId).limit(1);
+                if (!evErr && (!ev || ev.length === 0)) {
+                // Use anon client insert without .select() to avoid PostgREST `columns=` behavior that can trigger 403 under RLS
+                try {
+                  console.debug('Inserting identification_vote (for createdIdent) ident', createdIdent?.id, 'user', sessionUserId, '\nstack:', new Error().stack);
+                  await sb.from('identification_votes').insert([{ identification_id: createdIdent.id, user_id: sessionUserId }]);
+                } catch (ie) {
+                  // ignore
+                }
+              }
+            } catch (ve) {
+              // ignore
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('persistIdentificationAndVote failed', e);
+    }
+  }
 
   const handleDelete = async () => {
     if (!window.confirm('Delete this observation?')) return;
@@ -1086,6 +1246,7 @@ export function ObservationDetailModal({
                       )}
                       <div className="text-sm text-gray-600 mt-2">{topCommunityTaxon.count} vote(s)</div>
                       <div className="mt-3">
+                        
                         <div className="w-full bg-gray-200 rounded h-6 relative overflow-hidden">
                           {/* vote segments */}
                           <div className="flex h-full w-full">
@@ -1100,6 +1261,7 @@ export function ObservationDetailModal({
                           {/* two-thirds marker */}
                           <div style={{ position: 'absolute', left: `${(2 / 3) * 100}%`, top: 0, bottom: 0, width: 2, background: 'rgba(0,0,0,0.5)' }} />
                         </div>
+                                  
                         <div className="flex items-center justify-between text-xs text-gray-500 mt-1">
                           <div>{totalIdentificationsForType} total ID(s)</div>
                           <div>2/3 = {thresholdByIds} vote(s)</div>
