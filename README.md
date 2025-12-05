@@ -1,7 +1,7 @@
 # ChrysaLink — Lepidoptera Host Plant Explorer
 
 <p align="center">
-  <img src="frontend/public/navbar/logo.svg" alt="ChrysaLink Logo" width="200"/>
+  <img src="frontend/public/navbar/logo.png" alt="ChrysaLink Logo" width="200"/>
 </p>
 
 <p align="center">
