@@ -12,255 +12,118 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from './ui/dropdown-menu';
-import { apiClient } from '../api/client';
-
-// Environment variables
-const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || '';
-const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-
-interface Division {
-  id: string;
-  type: 'lepidoptera' | 'plant';
-  division_name: string;
-  common_name: string;
-  description: string;
-}
-
-interface TaxonomyItem {
-  id: string;
-  division: string;
-  family?: string;
-  genus?: string;
-  species?: string;
-  common_name?: string;
-}
-
-interface Relationship {
-  lepidoptera: string;
-  plant: string;
-  count: number;
-}
+import { RelationshipGraph } from './RelationshipGraph';
+import { useRelationshipGraph } from '../hooks/useRelationshipGraph';
+import { relationshipService } from '../services/relationshipService';
+import { TaxonomyNode } from '../types/relationship';
 
 export function RelationshipPage() {
-  const [relationships, setRelationships] = useState<Relationship[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  
-  // Filter types
-  const filterTypes = ['Division', 'Family', 'Genus', 'Scientific Name'];
-  
-  // Lepidoptera side
-  const [lepidopteraSearch, setLepidopteraSearch] = useState('');
-  const [lepidopteraFilterType, setLepidopteraFilterType] = useState<string>('Division');
-  const [showLepidopteraSearch, setShowLepidopteraSearch] = useState(false);
-  const [lepidopteraNodes, setLepidopteraNodes] = useState<TaxonomyItem[]>([]);
-  
-  // Plant side
-  const [plantSearch, setPlantSearch] = useState('');
-  const [plantFilterType, setPlantFilterType] = useState<string>('Division');
-  const [showPlantSearch, setShowPlantSearch] = useState(false);
-  const [plantNodes, setPlantNodes] = useState<TaxonomyItem[]>([]);
+  // Graph data and visualization state
+  const { graphData, isLoading: graphLoading, error: graphError, refetch } = useRelationshipGraph();
 
+  // UI state for filters and search
+  const [lepidopteraSearch, setLepidopteraSearch] = useState('');
+  const [plantSearch, setPlantSearch] = useState('');
+  const [selectedLepidoptera, setSelectedLepidoptera] = useState<TaxonomyNode | null>(null);
+  const [selectedPlant, setSelectedPlant] = useState<TaxonomyNode | null>(null);
+
+  // Divisions for filter dropdowns
+  const [lepidopteraDivisions, setLepidopteraDivisions] = useState<string[]>([]);
+  const [plantDivisions, setPlantDivisions] = useState<string[]>([]);
+  const [selectedLepidopteraDivision, setSelectedLepidopteraDivision] = useState<string>('');
+  const [selectedPlantDivision, setSelectedPlantDivision] = useState<string>('');
+
+  // Search results
+  const [lepidopteraSearchResults, setLepidopteraSearchResults] = useState<TaxonomyNode[]>([]);
+  const [plantSearchResults, setPlantSearchResults] = useState<TaxonomyNode[]>([]);
+  const [showLepidopteraResults, setShowLepidopteraResults] = useState(false);
+  const [showPlantResults, setShowPlantResults] = useState(false);
+
+  // Initialize: load divisions and graph data
   useEffect(() => {
-    fetchTaxonomyAndRelationships();
+    const initializeData = async () => {
+      try {
+        const [lepDivs, plantDivs] = await Promise.all([
+          relationshipService.fetchDivisions('lepidoptera'),
+          relationshipService.fetchDivisions('plant'),
+        ]);
+        setLepidopteraDivisions(lepDivs);
+        setPlantDivisions(plantDivs);
+      } catch (error) {
+        console.error('Error initializing divisions:', error);
+      }
+    };
+
+    initializeData();
   }, []);
 
+  // Handle lepidoptera search
   useEffect(() => {
-    // Update lepidoptera nodes based on filter type
-    fetchLepidopteraNodes();
-  }, [lepidopteraFilterType, lepidopteraSearch]);
+    const handleSearch = async () => {
+      if (lepidopteraSearch.trim().length > 2) {
+        const results = await relationshipService.searchTaxonomy(
+          lepidopteraSearch,
+          'lepidoptera'
+        );
+        setLepidopteraSearchResults(results);
+        setShowLepidopteraResults(true);
+      } else {
+        setLepidopteraSearchResults([]);
+        setShowLepidopteraResults(false);
+      }
+    };
 
+    const debounceTimer = setTimeout(handleSearch, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [lepidopteraSearch]);
+
+  // Handle plant search
   useEffect(() => {
-    // Update plant nodes based on filter type
-    fetchPlantNodes();
-  }, [plantFilterType, plantSearch]);
-
-  const fetchLepidopteraNodes = async () => {
-    try {
-      let query = `*`;
-      let filter = `division.eq."Rhopalocera",division.eq."Heterocera"`;
-
-      if (lepidopteraFilterType === 'Division') {
-        query = `division,common_name`;
-        filter = `and(or(division.eq."Rhopalocera",division.eq."Heterocera"),family.is.null,genus.is.null,species.is.null)`;
-      } else if (lepidopteraFilterType === 'Family') {
-        query = `family,division`;
-        filter = `and(or(division.eq."Rhopalocera",division.eq."Heterocera"),family.not.is.null,genus.is.null,species.is.null)`;
-      } else if (lepidopteraFilterType === 'Genus') {
-        query = `genus,family,division`;
-        filter = `and(or(division.eq."Rhopalocera",division.eq."Heterocera"),genus.not.is.null,species.is.null)`;
-      } else if (lepidopteraFilterType === 'Scientific Name') {
-        query = `genus,species,family,division`;
-        filter = `and(or(division.eq."Rhopalocera",division.eq."Heterocera"),species.not.is.null)`;
+    const handleSearch = async () => {
+      if (plantSearch.trim().length > 2) {
+        const results = await relationshipService.searchTaxonomy(
+          plantSearch,
+          'plant'
+        );
+        setPlantSearchResults(results);
+        setShowPlantResults(true);
+      } else {
+        setPlantSearchResults([]);
+        setShowPlantResults(false);
       }
+    };
 
-      const response = await fetch(
-        `https://${PROJECT_ID}.supabase.co/rest/v1/lepidoptera_taxonomy?select=${query}&${filter}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${ANON_KEY}`,
-            'apikey': ANON_KEY
-          }
-        }
-      );
+    const debounceTimer = setTimeout(handleSearch, 300);
+    return () => clearTimeout(debounceTimer);
+  }, [plantSearch]);
 
-      if (response.ok) {
-        let data = await response.json();
-        
-        // Remove duplicates based on the display value
-        const seen = new Set();
-        data = data.filter((item: TaxonomyItem) => {
-          const key = lepidopteraFilterType === 'Division' 
-            ? item.division 
-            : lepidopteraFilterType === 'Family'
-            ? item.family
-            : lepidopteraFilterType === 'Genus'
-            ? item.genus
-            : `${item.genus} ${item.species}`;
-          
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
+  // Handle graph refresh when divisions change
+  useEffect(() => {
+    const filters = {
+      lepidoptera_division: selectedLepidopteraDivision || undefined,
+      plant_division: selectedPlantDivision || undefined,
+    };
 
-        setLepidopteraNodes(data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching lepidoptera nodes:', error);
-    }
+    refetch(Object.keys(filters).some((k) => filters[k as keyof typeof filters]) ? filters : undefined);
+  }, [selectedLepidopteraDivision, selectedPlantDivision, refetch]);
+
+  const handleLepidopteraSelect = (node: TaxonomyNode) => {
+    setSelectedLepidoptera(node);
+    setLepidopteraSearch(node.display_name);
+    setShowLepidopteraResults(false);
   };
 
-  const fetchPlantNodes = async () => {
-    try {
-      if (plantFilterType === 'Division') {
-        const query = `division,common_name`;
-        const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),family.is.null,genus.is.null,species.is.null)`;
-        
-        const response = await fetch(
-          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${ANON_KEY}`,
-              'apikey': publicAnonKey
-            }
-          }
-        );
-
-        if (response.ok) {
-          let data = await response.json();
-          
-          // Remove duplicates for divisions
-          const seen = new Set();
-          data = data.filter((item: TaxonomyItem) => {
-            if (seen.has(item.division)) return false;
-            seen.add(item.division);
-            return true;
-          });
-
-          setPlantNodes(data || []);
-        }
-      } else if (plantFilterType === 'Family') {
-        const query = `family,division`;
-        const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),family.not.is.null,genus.is.null,species.is.null)`;
-        
-        const response = await fetch(
-          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${ANON_KEY}`,
-              'apikey': publicAnonKey
-            }
-          }
-        );
-
-        if (response.ok) {
-          let data = await response.json();
-          
-          // Remove duplicates based on family name
-          const seen = new Set();
-          data = data.filter((item: TaxonomyItem) => {
-            if (seen.has(item.family)) return false;
-            seen.add(item.family);
-            return true;
-          });
-
-          setPlantNodes(data || []);
-        }
-      } else if (plantFilterType === 'Genus') {
-        const query = `genus,family,division`;
-        const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),genus.not.is.null,species.is.null)`;
-        
-        const response = await fetch(
-          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${ANON_KEY}`,
-              'apikey': publicAnonKey
-            }
-          }
-        );
-
-        if (response.ok) {
-          let data = await response.json();
-          
-          // Remove duplicates based on genus name
-          const seen = new Set();
-          data = data.filter((item: TaxonomyItem) => {
-            if (seen.has(item.genus)) return false;
-            seen.add(item.genus);
-            return true;
-          });
-
-          setPlantNodes(data || []);
-        }
-      } else if (plantFilterType === 'Scientific Name') {
-        const query = `genus,species,family,division`;
-        const filter = `and(or(division.eq."Pteridophyte",division.eq."Gymnosperm",division.eq."Angiosperm"),species.not.is.null)`;
-        
-        const response = await fetch(
-          `https://${PROJECT_ID}.supabase.co/rest/v1/plant_taxonomy?select=${query}&${filter}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${ANON_KEY}`,
-              'apikey': publicAnonKey
-            }
-          }
-        );
-
-        if (response.ok) {
-          const data = await response.json();
-          setPlantNodes(data || []);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching plant nodes:', error);
-    }
+  const handlePlantSelect = (node: TaxonomyNode) => {
+    setSelectedPlant(node);
+    setPlantSearch(node.display_name);
+    setShowPlantResults(false);
   };
 
-  const fetchTaxonomyAndRelationships = async () => {
-    setIsLoading(true);
-    try {
-      // Fetch relationships
-      const response = await fetch(
-        `https://${PROJECT_ID}.supabase.co/functions/v1/make-server-b55216b3/relationships`,
-        {
-          headers: {
-            'Authorization': `Bearer ${ANON_KEY}`
-          }
-        }
-      );
-
-      const data = await response.json();
-      if (response.ok) {
-        setRelationships(data.relationships || []);
-      }
-      
-      // Fetch initial nodes
-      await fetchLepidopteraNodes();
-      await fetchPlantNodes();
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      setIsLoading(false);
+  const handleGraphNodeClick = (node: any) => {
+    if (node.data.type === 'lepidoptera') {
+      setSelectedLepidoptera(node.data);
+    } else {
+      setSelectedPlant(node.data);
     }
   };
 
@@ -274,180 +137,210 @@ export function RelationshipPage() {
             Ecological Relationships
           </h1>
           <p className="text-gray-600">
-            Explore the connections between Lepidoptera species and their host plants
+            Explore the connections between Lepidoptera species and their host plants using interactive visualization
           </p>
         </div>
 
-        {/* Bipartite Graph Container */}
-        <Card>
-          <CardContent className="p-8">
-            <div className="flex gap-8">
-              {/* LEFT SIDE: LEPIDOPTERA */}
-              <div className="flex-1">
-                <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                   Lepidoptera
-                </h2>
-
-                {/* Search Bar - Lepidoptera */}
-                <div className="mb-4">
-                  <Input
-                    placeholder="Search species..."
-                    value={lepidopteraSearch}
-                    onChange={(e) => setLepidopteraSearch(e.target.value)}
-                    onFocus={() => setShowLepidopteraSearch(true)}
-                    onBlur={() => setTimeout(() => setShowLepidopteraSearch(false), 200)}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* Filter Dropdown - Lepidoptera */}
-                {!showLepidopteraSearch && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between mb-6">
-                        <span>Filter by: {lepidopteraFilterType}</span>
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56">
-                      <DropdownMenuLabel>Select Filter Type</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {filterTypes.map((type) => (
-                        <DropdownMenuCheckboxItem
-                          key={type}
-                          checked={lepidopteraFilterType === type}
-                          onCheckedChange={() => setLepidopteraFilterType(type)}
-                        >
-                          {type}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-
-                {/* Lepidoptera Nodes */}
-                <div className="space-y-2">
-                  {lepidopteraNodes.length > 0 ? (
-                    lepidopteraNodes.map((node, idx) => (
-                      <div
-                        key={`${node.id}-${idx}`}
-                        className="p-4 border-2 border-blue-200 bg-blue-50 rounded-lg text-center font-medium text-blue-900 hover:bg-blue-100 cursor-pointer transition-colors"
-                      >
-                        <div>
-                          {lepidopteraFilterType === 'Division' && (
-                            <>
-                              <div>{node.division}</div>
-                              <div className="text-xs text-blue-700">{node.common_name}</div>
-                            </>
-                          )}
-                          {lepidopteraFilterType === 'Family' && <div>{node.family}</div>}
-                          {lepidopteraFilterType === 'Genus' && <div>{node.genus}</div>}
-                          {lepidopteraFilterType === 'Scientific Name' && (
-                            <div>{node.genus} {node.species}</div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-gray-500 py-4">
-                      No nodes found
-                    </div>
-                  )}
-                </div>
+        {/* Main visualization card */}
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Relationship Network Graph</span>
+              {graphLoading && <Badge variant="outline">Loading...</Badge>}
+              {graphError && <Badge variant="destructive">Error</Badge>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {/* Filter controls */}
+            <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b">
+              <div>
+                <label className="block text-sm font-medium mb-2">Lepidoptera Division</label>
+                <select
+                  value={selectedLepidopteraDivision}
+                  onChange={(e) => setSelectedLepidopteraDivision(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">All divisions</option>
+                  {lepidopteraDivisions.map((div) => (
+                    <option key={div} value={div}>
+                      {div}
+                    </option>
+                  ))}
+                </select>
               </div>
-
-              {/* CENTER: NETWORK VISUALIZATION */}
-              <div className="flex items-center justify-center px-8">
-                <div className="w-16 h-48 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
-                  <span className="text-gray-400 text-xs text-center">Network</span>
-                </div>
-              </div>
-
-              {/* RIGHT SIDE: HOST PLANTS */}
-              <div className="flex-1">
-                <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-                  Host Plants
-                </h2>
-
-                {/* Search Bar - Plants */}
-                <div className="mb-4">
-                  <Input
-                    placeholder="Search species..."
-                    value={plantSearch}
-                    onChange={(e) => setPlantSearch(e.target.value)}
-                    onFocus={() => setShowPlantSearch(true)}
-                    onBlur={() => setTimeout(() => setShowPlantSearch(false), 200)}
-                    className="w-full"
-                  />
-                </div>
-
-                {/* Filter Dropdown - Plants */}
-                {!showPlantSearch && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between mb-6">
-                        <span>Filter by: {plantFilterType}</span>
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="w-56">
-                      <DropdownMenuLabel>Select Filter Type</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      {filterTypes.map((type) => (
-                        <DropdownMenuCheckboxItem
-                          key={type}
-                          checked={plantFilterType === type}
-                          onCheckedChange={() => setPlantFilterType(type)}
-                        >
-                          {type}
-                        </DropdownMenuCheckboxItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-
-                {/* Plant Nodes */}
-                <div className="space-y-2">
-                  {plantNodes.length > 0 ? (
-                    plantNodes.map((node, idx) => (
-                      <div
-                        key={`${node.id}-${idx}`}
-                        className="p-4 border-2 border-green-200 bg-green-50 rounded-lg text-center font-medium text-green-900 hover:bg-green-100 cursor-pointer transition-colors"
-                      >
-                        <div>
-                          {plantFilterType === 'Division' && (
-                            <>
-                              <div>{node.division}</div>
-                              <div className="text-xs text-green-700">{node.common_name}</div>
-                            </>
-                          )}
-                          {plantFilterType === 'Family' && <div>{node.family}</div>}
-                          {plantFilterType === 'Genus' && <div>{node.genus}</div>}
-                          {plantFilterType === 'Scientific Name' && (
-                            <div>{node.genus} {node.species}</div>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center text-gray-500 py-4">
-                      No nodes found
-                    </div>
-                  )}
-                </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Plant Division</label>
+                <select
+                  value={selectedPlantDivision}
+                  onChange={(e) => setSelectedPlantDivision(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="">All divisions</option>
+                  {plantDivisions.map((div) => (
+                    <option key={div} value={div}>
+                      {div}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
+
+            {/* WebGL Graph Visualization */}
+            <RelationshipGraph
+              nodes={graphData?.nodes || []}
+              edges={graphData?.edges || []}
+              isLoading={graphLoading}
+              height={600}
+              onNodeClick={handleGraphNodeClick}
+            />
+
+            {graphError && (
+              <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800">
+                  Error loading graph: {graphError.message}
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
+        {/* Search and detail sections */}
+        <div className="grid grid-cols-2 gap-8 mb-8">
+          {/* Lepidoptera search */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Search Lepidoptera</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="relative">
+                <Input
+                  placeholder="Search by name or division..."
+                  value={lepidopteraSearch}
+                  onChange={(e) => setLepidopteraSearch(e.target.value)}
+                  onFocus={() => setShowLepidopteraResults(true)}
+                  className="w-full"
+                />
+                {showLepidopteraResults && lepidopteraSearchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-64 overflow-y-auto">
+                    {lepidopteraSearchResults.map((result) => (
+                      <button
+                        key={result.id}
+                        onClick={() => handleLepidopteraSelect(result)}
+                        className="w-full text-left px-4 py-2 hover:bg-yellow-50 border-b last:border-b-0 flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-medium">{result.display_name}</div>
+                          <div className="text-xs text-gray-500">
+                            {result.taxonomic_level} {result.is_placeholder ? '(placeholder)' : ''}
+                          </div>
+                        </div>
+                        {result.is_placeholder && (
+                          <Badge variant="secondary" className="ml-2">PH</Badge>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedLepidoptera && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="font-medium text-yellow-900">Selected:</div>
+                  <div className="text-sm text-yellow-800 mt-2">
+                    <div><strong>Name:</strong> {selectedLepidoptera.display_name}</div>
+                    <div><strong>Level:</strong> {selectedLepidoptera.taxonomic_level}</div>
+                    <div><strong>Division:</strong> {selectedLepidoptera.division}</div>
+                    {selectedLepidoptera.family && <div><strong>Family:</strong> {selectedLepidoptera.family}</div>}
+                    {selectedLepidoptera.genus && <div><strong>Genus:</strong> {selectedLepidoptera.genus}</div>}
+                    {selectedLepidoptera.is_placeholder && (
+                      <div className="mt-2 text-xs italic">This is a placeholder taxon (no species designation)</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Plant search */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Search Plants</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="relative">
+                <Input
+                  placeholder="Search by name or division..."
+                  value={plantSearch}
+                  onChange={(e) => setPlantSearch(e.target.value)}
+                  onFocus={() => setShowPlantResults(true)}
+                  className="w-full"
+                />
+                {showPlantResults && plantSearchResults.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-64 overflow-y-auto">
+                    {plantSearchResults.map((result) => (
+                      <button
+                        key={result.id}
+                        onClick={() => handlePlantSelect(result)}
+                        className="w-full text-left px-4 py-2 hover:bg-green-50 border-b last:border-b-0 flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="font-medium">{result.display_name}</div>
+                          <div className="text-xs text-gray-500">
+                            {result.taxonomic_level} {result.is_placeholder ? '(placeholder)' : ''}
+                          </div>
+                        </div>
+                        {result.is_placeholder && (
+                          <Badge variant="secondary" className="ml-2">PH</Badge>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedPlant && (
+                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <div className="font-medium text-green-900">Selected:</div>
+                  <div className="text-sm text-green-800 mt-2">
+                    <div><strong>Name:</strong> {selectedPlant.display_name}</div>
+                    <div><strong>Level:</strong> {selectedPlant.taxonomic_level}</div>
+                    <div><strong>Division:</strong> {selectedPlant.division}</div>
+                    {selectedPlant.family && <div><strong>Family:</strong> {selectedPlant.family}</div>}
+                    {selectedPlant.genus && <div><strong>Genus:</strong> {selectedPlant.genus}</div>}
+                    {selectedPlant.is_placeholder && (
+                      <div className="mt-2 text-xs italic">This is a placeholder taxon (no species designation)</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
         {/* Info Box */}
-        <div className="mt-8 p-6 bg-blue-50 rounded-lg border border-blue-200">
+        <div className="p-6 bg-blue-50 rounded-lg border border-blue-200">
           <h3 className="font-semibold mb-2">How to use</h3>
           <ul className="space-y-2 text-sm text-gray-700">
-            <li>• Search for a Lepidoptera species or plant to see their connections</li>
-            <li>• Use the filter dropdowns to browse by taxonomic division</li>
-            <li>• When searching on one side, the other side will show filtered results</li>
-            <li>• Click on a node to see detailed relationships and observation counts</li>
+            <li>
+              <strong>Graph Visualization:</strong> The interactive WebGL graph shows relationships between
+              Lepidoptera (left, yellow) and their host plants (right, green)
+            </li>
+            <li>
+              <strong>Drill Down:</strong> Click on nodes in the graph to expand to the next taxonomic level
+              (Division → Family → Genus → Species)
+            </li>
+            <li>
+              <strong>Filter:</strong> Use the division dropdowns to filter the graph by specific plant or
+              butterfly groups
+            </li>
+            <li>
+              <strong>Search:</strong> Use the search boxes to find specific species or taxa. Placeholder
+              taxons (unidentified species grouped at higher levels) are marked with <Badge className="inline ml-1">PH</Badge>
+            </li>
+            <li>
+              <strong>Edges:</strong> Lines connecting nodes represent observed relationships between species
+              with observation and verification counts
+            </li>
           </ul>
         </div>
       </div>
