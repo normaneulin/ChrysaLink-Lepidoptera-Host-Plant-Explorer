@@ -28,6 +28,7 @@ def main():
     token = os.environ.get("HUGGINGFACE_TOKEN")
     if not token:
         print("HUGGINGFACE_TOKEN not set in environment. If the repo is private, set it and re-run.")
+        token = None  # Pass None instead of empty string to avoid Bearer auth issues
 
     for fname in FILES:
         print(f"Downloading {fname} from {REPO} ...")
