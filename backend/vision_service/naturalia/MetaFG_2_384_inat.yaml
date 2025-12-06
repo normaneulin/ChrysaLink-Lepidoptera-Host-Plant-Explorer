@@ -1,0 +1,13 @@
+DATA:
+  IMG_SIZE: 384
+  DATASET: coco_generic
+  DATASET_ROOT: /home/josh/data/inaturalist_sgd
+  NUM_WORKERS: 16
+MODEL:
+  TYPE: MetaFG
+  NAME: MetaFG_2
+  DORP_HEAD: False
+  NUM_CLASSES: 6188
+  
+TRAIN:
+  AUTO_RESUME: True
