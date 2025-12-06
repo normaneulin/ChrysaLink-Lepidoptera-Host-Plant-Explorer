@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -46,25 +46,29 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
   const [hostPlantSuggestions, setHostPlantSuggestions] = useState<any[]>([]);
   const [showLepidopteraPopover, setShowLepidopteraPopover] = useState(false);
   const [showHostPlantPopover, setShowHostPlantPopover] = useState(false);
+  const [isSearchingLepidoptera, setIsSearchingLepidoptera] = useState(false);
+  const [isSearchingHostPlant, setIsSearchingHostPlant] = useState(false);
 
-  useEffect(() => {
-    if (lepidopteraSearch.length > 0) {
-      searchSpecies(lepidopteraSearch, 'lepidoptera');
-    } else {
-      setLepidopteraSuggestions([]);
-    }
-  }, [lepidopteraSearch]);
-
-  useEffect(() => {
-    if (hostPlantSearch.length > 0) {
-      searchSpecies(hostPlantSearch, 'plant');
-    } else {
-      setHostPlantSuggestions([]);
-    }
-  }, [hostPlantSearch]);
+  // Debounce timers for search
+  const lepidopteraSearchTimeout = useRef<NodeJS.Timeout | null>(null);
+  const hostPlantSearchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const searchSpecies = async (query: string, type: 'lepidoptera' | 'plant') => {
+    if (!query || query.length < 1) {
+      if (type === 'lepidoptera') {
+        setLepidopteraSuggestions([]);
+      } else {
+        setHostPlantSuggestions([]);
+      }
+      return;
+    }
+
     try {
+      if (type === 'lepidoptera') {
+        setIsSearchingLepidoptera(true);
+      } else {
+        setIsSearchingHostPlant(true);
+      }
       console.log('Searching for:', query, 'type:', type);
       const response = await apiClient.get(
         `/species/search?q=${encodeURIComponent(query)}&type=${type}`,
@@ -74,20 +78,101 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
       console.log('Search response:', response);
 
       if (response.success) {
-        if (type === 'lepidoptera') {
-          setLepidopteraSuggestions(response.data || []);
-          console.log('Lepidoptera suggestions:', response.data);
+        let results = response.data || [];
+        
+        // Filter logic: Only show placeholders, UNLESS genus level is matched
+        // Using proper operator precedence with parentheses to match SQL logic:
+        // WHERE (scientific_name IS NULL OR scientific_name = '') AND (genus = 'GenusName')
+        const hasGenusMatch = results.some(item => item.taxonomic_level === 'genus');
+        
+        if (hasGenusMatch) {
+          // If genus is matched, show:
+          // - All placeholders (scientific_name IS NULL OR empty) with that genus
+          // - All species (scientific_name NOT NULL) with that genus
+          const genusName = results.find(item => item.taxonomic_level === 'genus')?.display_name;
+          results = results.filter(item => 
+            (item.genus === genusName) && (item.is_placeholder || !item.is_placeholder)
+          );
         } else {
-          setHostPlantSuggestions(response.data || []);
-          console.log('Plant suggestions:', response.data);
+          // Otherwise, show only placeholders (no genus match yet)
+          // WHERE (scientific_name IS NULL OR scientific_name = '')
+          results = results.filter(item => item.is_placeholder);
+        }
+        
+        if (type === 'lepidoptera') {
+          console.log('Lepidoptera suggestions: ' + results.length + ' results');
+          setLepidopteraSuggestions(results);
+        } else {
+          console.log('Plant suggestions: ' + results.length + ' results');
+          setHostPlantSuggestions(results);
         }
       } else {
         console.error('Search failed:', response.error);
+        if (type === 'lepidoptera') {
+          setLepidopteraSuggestions([]);
+        } else {
+          setHostPlantSuggestions([]);
+        }
       }
     } catch (error) {
       console.error('Error searching species:', error);
+      if (type === 'lepidoptera') {
+        setLepidopteraSuggestions([]);
+      } else {
+        setHostPlantSuggestions([]);
+      }
+    } finally {
+      if (type === 'lepidoptera') {
+        setIsSearchingLepidoptera(false);
+      } else {
+        setIsSearchingHostPlant(false);
+      }
     }
   };
+
+  useEffect(() => {
+    // Clear previous timeout
+    if (lepidopteraSearchTimeout.current) {
+      clearTimeout(lepidopteraSearchTimeout.current);
+    }
+
+    // Set new timeout for debounced search
+    if (lepidopteraSearch.length > 0) {
+      lepidopteraSearchTimeout.current = setTimeout(() => {
+        searchSpecies(lepidopteraSearch, 'lepidoptera');
+      }, 300); // 300ms debounce
+    } else {
+      setLepidopteraSuggestions([]);
+    }
+
+    return () => {
+      if (lepidopteraSearchTimeout.current) {
+        clearTimeout(lepidopteraSearchTimeout.current);
+      }
+    };
+  }, [lepidopteraSearch]);
+
+  useEffect(() => {
+    // Clear previous timeout
+    if (hostPlantSearchTimeout.current) {
+      clearTimeout(hostPlantSearchTimeout.current);
+    }
+
+    // Set new timeout for debounced search
+    if (hostPlantSearch.length > 0) {
+      hostPlantSearchTimeout.current = setTimeout(() => {
+        searchSpecies(hostPlantSearch, 'plant');
+      }, 300); // 300ms debounce
+    } else {
+      setHostPlantSuggestions([]);
+    }
+
+    return () => {
+      if (hostPlantSearchTimeout.current) {
+        clearTimeout(hostPlantSearchTimeout.current);
+      }
+    };
+  }, [hostPlantSearch]);
 
   const handleImageUpload = (type: 'lepidoptera' | 'hostPlant') => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files && e.target.files[0];
@@ -411,13 +496,14 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                     onFocus={() => setShowLepidopteraPopover(true)}
                     placeholder="Type to search species..."
                   />
-                  {showLepidopteraPopover && lepidopteraSuggestions.length > 0 && (
+                  {isSearchingLepidoptera && <div className="absolute z-50 w-full mt-1 p-3 bg-white border rounded-md text-sm text-gray-500">Searching...</div>}
+                  {showLepidopteraPopover && !isSearchingLepidoptera && lepidopteraSuggestions.length > 0 && (
                     <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
                       {lepidopteraSuggestions.map((species) => (
                         <button
                           key={species.id}
                           type="button"
-                          className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 ${species.is_placeholder ? 'bg-amber-50' : ''}`}
                           onClick={() => {
                             setLepidopteraId(species.id || '');
                             if (species.taxonomic_level === 'family') {
@@ -432,9 +518,11 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           }}
                         >
                           <div className="flex items-center gap-2">
-                            <div className="font-medium italic">{species.display_name || species.scientific_name}</div>
+                            <div className={`font-medium ${!species.is_placeholder ? 'italic' : ''}`}>
+                              {species.display_name || species.scientific_name}
+                            </div>
                             {species.taxonomic_level && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${species.is_placeholder ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
                                 {species.taxonomic_level}
                               </span>
                             )}
@@ -442,7 +530,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           {species.common_name && (
                             <div className="text-xs text-gray-500">{species.common_name}</div>
                           )}
-                          {species.family && species.taxonomic_level !== 'family' && (
+                          {species.family && species.taxonomic_level !== 'family' && !species.is_placeholder && (
                             <div className="text-xs text-gray-400">Family: {species.family}</div>
                           )}
                         </button>
@@ -512,13 +600,14 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                     onFocus={() => setShowHostPlantPopover(true)}
                     placeholder="Type to search species..."
                   />
-                  {showHostPlantPopover && hostPlantSuggestions.length > 0 && (
+                  {isSearchingHostPlant && <div className="absolute z-50 w-full mt-1 p-3 bg-white border rounded-md text-sm text-gray-500">Searching...</div>}
+                  {showHostPlantPopover && !isSearchingHostPlant && hostPlantSuggestions.length > 0 && (
                     <div className="absolute z-50 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
                       {hostPlantSuggestions.map((species) => (
                         <button
                           key={species.id}
                           type="button"
-                          className="w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100"
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 ${species.is_placeholder ? 'bg-emerald-50' : ''}`}
                           onClick={() => {
                             setHostPlantId(species.id || '');
                             if (species.taxonomic_level === 'family') {
@@ -533,9 +622,11 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           }}
                         >
                           <div className="flex items-center gap-2">
-                            <div className="font-medium italic">{species.display_name || species.scientific_name}</div>
+                            <div className={`font-medium ${!species.is_placeholder ? 'italic' : ''}`}>
+                              {species.display_name || species.scientific_name}
+                            </div>
                             {species.taxonomic_level && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${species.is_placeholder ? 'bg-emerald-100 text-emerald-700' : 'bg-green-100 text-green-700'}`}>
                                 {species.taxonomic_level}
                               </span>
                             )}
@@ -543,7 +634,7 @@ export function UploadObservationModal({ isOpen, onClose, accessToken, onSuccess
                           {species.common_name && (
                             <div className="text-xs text-gray-500">{species.common_name}</div>
                           )}
-                          {species.family && species.taxonomic_level !== 'family' && (
+                          {species.family && species.taxonomic_level !== 'family' && !species.is_placeholder && (
                             <div className="text-xs text-gray-400">Family: {species.family}</div>
                           )}
                         </button>

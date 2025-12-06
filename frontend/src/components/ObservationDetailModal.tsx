@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 //import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { 
   Dialog, 
@@ -128,7 +128,25 @@ export function ObservationDetailModal({
               try {
                 const resp = await apiClient.searchSpecies(name, type);
                 if (resp && resp.success && Array.isArray(resp.data) && resp.data.length > 0) {
-                  lookupResultsByKey[k] = resp.data[0];
+                  // Align with upload popover logic: prefer placeholders unless a genus match exists
+                  let results = resp.data || [];
+                  const hasGenusMatch = results.some((item: any) => item.taxonomic_level === 'genus');
+
+                  if (hasGenusMatch) {
+                    const genusName = results.find((item: any) => item.taxonomic_level === 'genus')?.display_name;
+                    results = results.filter(
+                      (item: any) => item.genus === genusName && (item.is_placeholder || !item.is_placeholder)
+                    );
+                  } else {
+                    results = results.filter((item: any) => item.is_placeholder);
+                  }
+
+                  // Fallback to original list if filtering removed everything
+                  if (!results || results.length === 0) results = resp.data;
+
+                  if (results && results.length > 0) {
+                    lookupResultsByKey[k] = results[0];
+                  }
                 }
               } catch (e) {
                 // ignore lookup failure for this name
@@ -271,6 +289,8 @@ export function ObservationDetailModal({
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestPopover, setShowSuggestPopover] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState<any>(null);
+  const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false);
+  const suggestSearchTimeout = useRef<NodeJS.Timeout | null>(null);
   
   // Tab State
   const [activeTab, setActiveTab] = useState('comment'); 
@@ -293,29 +313,83 @@ export function ObservationDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, observation?.id]);
 
+  const searchSuggestSpecies = async (
+    query: string,
+    type: 'lepidoptera' | 'plant',
+    isCancelled?: () => boolean
+  ) => {
+    if (!query || query.length < 1) {
+      setSuggestions([]);
+      return;
+    }
+
+    try {
+      setIsSearchingSuggestions(true);
+      const resp = await apiClient.get(
+        `/species/search?q=${encodeURIComponent(query)}&type=${type}`,
+        accessToken
+      );
+      if (isCancelled && isCancelled()) return;
+
+      if (resp && resp.success) {
+        let results = resp.data || [];
+
+        // Mirror UploadObservationModal logic: show placeholders unless a genus match exists
+        const hasGenusMatch = results.some((item: any) => item.taxonomic_level === 'genus');
+
+        if (hasGenusMatch) {
+          const genusName = results.find((item: any) => item.taxonomic_level === 'genus')?.display_name;
+          results = results.filter(
+            (item: any) => item.genus === genusName && (item.is_placeholder || !item.is_placeholder)
+          );
+        } else {
+          results = results.filter((item: any) => item.is_placeholder);
+        }
+
+        setSuggestions(results);
+      } else {
+        setSuggestions([]);
+      }
+    } catch (e) {
+      setSuggestions([]);
+    } finally {
+      const cancelled = isCancelled ? isCancelled() : false;
+      if (!cancelled) {
+        setIsSearchingSuggestions(false);
+      }
+    }
+  };
+
   // When user types in the Suggest ID search input, query species suggestions
   useEffect(() => {
     let cancelled = false;
-    const doSearch = async () => {
-      if (!suggestSearch || suggestSearch.length === 0) {
-        setSuggestions([]);
-        return;
-      }
-      try {
-        const type = suggestType === 'lepidoptera' ? 'lepidoptera' : 'plant';
-        const resp = await apiClient.get(`/species/search?q=${encodeURIComponent(suggestSearch)}&type=${type}`, accessToken);
-        if (cancelled) return;
-        if (resp && resp.success) {
-          setSuggestions(resp.data || []);
-        } else {
-          setSuggestions([]);
+
+    if (suggestSearchTimeout.current) {
+      clearTimeout(suggestSearchTimeout.current);
+    }
+
+    if (!suggestSearch || suggestSearch.length === 0) {
+      setSuggestions([]);
+      setIsSearchingSuggestions(false);
+      return () => {
+        cancelled = true;
+        if (suggestSearchTimeout.current) {
+          clearTimeout(suggestSearchTimeout.current);
         }
-      } catch (e) {
-        setSuggestions([]);
+      };
+    }
+
+    const type = suggestType === 'lepidoptera' ? 'lepidoptera' : 'plant';
+    suggestSearchTimeout.current = setTimeout(() => {
+      searchSuggestSpecies(suggestSearch, type, () => cancelled);
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      if (suggestSearchTimeout.current) {
+        clearTimeout(suggestSearchTimeout.current);
       }
     };
-    doSearch();
-    return () => { cancelled = true; };
   }, [suggestSearch, suggestType, accessToken]);
 
   // --- Derived State: Unified Activity Feed ---
@@ -855,6 +929,35 @@ export function ObservationDetailModal({
     toast.success(`Suggested ${suggestType} ID: ${suggestSpecies}`);
     setSuggestSpecies('');
     setSuggestReason('');
+  };
+
+  // Optimistically append a local suggestion to the activity feed so non-scientific names appear immediately
+  const appendLocalSuggestion = (name: string, type: 'lepidoptera' | 'hostPlant') => {
+    const localId = `local-suggest-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    const identification_type = type;
+    const localIdentification: any = {
+      id: localId,
+      species: name,
+      common_name: name,
+      scientific_name: null,
+      identification_type,
+      user_id: currentUserId || null,
+      userId: currentUserId || null,
+      userName: 'You',
+      userAvatar: null,
+      created_at: createdAt,
+      createdAt,
+      votes: [{ id: `local-vote-${Date.now()}`, identification_id: localId, user_id: currentUserId || 'you' }],
+      identification_votes: [{ id: `local-vote-${Date.now()}`, identification_id: localId, user_id: currentUserId || 'you' }],
+      vote_count: 1,
+      subtype: type,
+    };
+
+    setLocalObservation((prev: any) => ({
+      ...(prev || {}),
+      identifications: [ ...(prev?.identifications || []), localIdentification ],
+    }));
   };
 
   // Helper to suggest an identification with fallback to direct Supabase insert
@@ -1423,9 +1526,9 @@ export function ObservationDetailModal({
                               <div className="text-amber-700 font-medium">Suggested ID</div>
                               <div className="font-bold mt-1 text-lg flex items-center gap-2">
                                 {item.thumb && <img src={item.thumb} className="w-8 h-8 rounded object-cover" alt="Taxon thumbnail" />}
-                                {item.commonName || ''}
+                                {item.commonName || item.species || item.scientificName || 'Suggested ID'}
                               </div>
-                              <div className="text-xs text-gray-500 italic">{item.scientificName}</div>
+                              <div className="text-xs text-gray-500 italic">{item.scientificName || item.species || ''}</div>
                               {item.caption && (
                                 <div className="text-sm text-gray-700 mt-2">{item.caption}</div>
                               )}
@@ -1581,6 +1684,7 @@ export function ObservationDetailModal({
                         const resp = await suggestWithFallback(payload);
                         if (resp && resp.success) {
                           toast.success('Suggestion submitted');
+                          appendLocalSuggestion(speciesName, suggestType);
                           setSuggestSearch('');
                           setSuggestSpecies('');
                           setSuggestReason('');

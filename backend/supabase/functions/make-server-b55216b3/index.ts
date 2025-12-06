@@ -361,21 +361,64 @@ Deno.serve(async (req) => {
 
       let data = [];
 
+      /**
+       * Placeholder Taxon Algorithm:
+       * - A "placeholder" is a row with empty/null scientific_name (higher-level taxonomy)
+       * - For incomplete searches (e.g., searching for "Pie" or "Genus"), show ONLY placeholders up to the allowed level
+       * - For complete species searches (e.g., "Pieris brassicae"), show both placeholders and species
+       * - Lepidoptera: placeholders up to tribe level
+       * - Plants: placeholders up to genus level
+       */
+
       if (type === 'lepidoptera') {
-        // Search lepidoptera_taxonomy table
-        const { data: results, error } = await supabase
+        // Query placeholders and species separately so placeholders are guaranteed to surface
+        const placeholderQuery = supabase
+          .from('lepidoptera_taxonomy')
+          .select('*')
+          .or(`division.ilike.%${query}%,family.ilike.%${query}%,subfamily.ilike.%${query}%,tribe.ilike.%${query}%,genus.ilike.%${query}%`)
+          .or(`scientific_name.is.null,scientific_name.eq.''`)
+          .limit(100);
+
+        const speciesQuery = supabase
           .from('lepidoptera_taxonomy')
           .select('*')
           .or(`division.ilike.%${query}%,family.ilike.%${query}%,subfamily.ilike.%${query}%,tribe.ilike.%${query}%,genus.ilike.%${query}%,specific_epithet.ilike.%${query}%,subspecific_epithet.ilike.%${query}%,scientific_name.ilike.%${query}%,common_name.ilike.%${query}%`)
-          .limit(10);
+          .not('scientific_name', 'is', null)
+          .limit(200);
 
-        if (error) throw error;
+        const [{ data: placeholderResults, error: placeholderError }, { data: speciesResults, error: speciesError }] = await Promise.all([
+          placeholderQuery,
+          speciesQuery,
+        ]);
+
+        if (placeholderError) throw placeholderError;
+        if (speciesError) throw speciesError;
+
+        const combined = [...(placeholderResults || []), ...(speciesResults || [])];
+
+        console.log(`[SEARCH] Query="${query}" Type=lepidoptera RawResults placeholders=${placeholderResults?.length || 0} species=${speciesResults?.length || 0}`);
+        if (combined && combined.length > 0) {
+          console.log(`[SEARCH] First 3 combined:`, combined.slice(0, 3).map(r => ({
+            family: r.family,
+            genus: r.genus,
+            scientific_name: r.scientific_name
+          })));
+        }
         
-        // Add smart display names based on what matched
-        data = (results || []).map(item => {
-          const q = query.toLowerCase();
+        const q = query.toLowerCase();
+        
+        // Check if query looks like a complete species (contains space or matches specific_epithet pattern)
+        // Case-insensitive check - allows both upper and lowercase letters
+        const isCompleteSpeciesSearch = query.includes(' ') || /^[a-zA-Z]+$/.test(query);
+        
+        // Add smart display names and placeholder flag
+        let processedResults = (combined || []).map(item => {
           let display_name = '';
           let taxonomic_level = '';
+          
+          // A placeholder has no scientific_name (NULL, empty string, or whitespace only)
+          // Matches SQL: WHERE scientific_name IS NULL OR scientific_name = '' || ' '
+          const is_placeholder = !item.scientific_name || item.scientific_name.trim() === '' || item.scientific_name.trim() === ' ';
           
           // Check what field matched (in order of specificity)
           if (item.scientific_name?.toLowerCase().includes(q)) {
@@ -414,24 +457,102 @@ Deno.serve(async (req) => {
           return {
             ...item,
             display_name,
-            taxonomic_level
+            taxonomic_level,
+            is_placeholder
           };
         });
+        
+        // Filter results: Always show matching placeholders up to allowed levels
+        // For lepidoptera: division, family, subfamily, tribe, genus (include genus placeholders)
+        processedResults = processedResults.filter(item => {
+          if (item.is_placeholder) {
+            // Allow placeholders up to genus level
+            const allowedLevels = ['division', 'family', 'subfamily', 'tribe', 'genus'];
+            return allowedLevels.includes(item.taxonomic_level);
+          }
+          // For non-placeholders (actual species), always show them
+          return true;
+        });
+        
+        console.log(`[SEARCH] After filtering: ${processedResults.length} results`);
+        if (processedResults.length > 0) {
+          console.log(`[SEARCH] Filtered results:`, processedResults.map(r => ({ 
+            display_name: r.display_name, 
+            taxonomic_level: r.taxonomic_level,
+            is_placeholder: r.is_placeholder,
+            family: r.family,
+            genus: r.genus
+          })));
+        }
+        
+        // Sort so placeholders surface first, then by taxonomic depth, then name
+        const rank: Record<string, number> = {
+          division: 1,
+          family: 2,
+          subfamily: 3,
+          tribe: 4,
+          genus: 5,
+          species: 6,
+          subspecies: 7,
+          common_name: 8,
+          unknown: 9,
+        };
+
+        processedResults.sort((a, b) => {
+          // Placeholders first
+          if (a.is_placeholder && !b.is_placeholder) return -1;
+          if (!a.is_placeholder && b.is_placeholder) return 1;
+
+          const ra = rank[a.taxonomic_level] || 99;
+          const rb = rank[b.taxonomic_level] || 99;
+          if (ra !== rb) return ra - rb;
+
+          const na = (a.display_name || a.scientific_name || a.genus || '').toLowerCase();
+          const nb = (b.display_name || b.scientific_name || b.genus || '').toLowerCase();
+          return na.localeCompare(nb);
+        });
+
+        data = processedResults.slice(0, 50); // Return top 50 after sorting
       } else if (type === 'plant') {
-        // Search plant_taxonomy table
-        const { data: results, error } = await supabase
+        // Query placeholders and species separately so placeholders are guaranteed to surface
+        const placeholderQuery = supabase
+          .from('plant_taxonomy')
+          .select('*')
+          .or(`division.ilike.%${query}%,family.ilike.%${query}%,genus.ilike.%${query}%`)
+          .or(`scientific_name.is.null,scientific_name.eq.''`)
+          .limit(100);
+
+        const speciesQuery = supabase
           .from('plant_taxonomy')
           .select('*')
           .or(`division.ilike.%${query}%,family.ilike.%${query}%,genus.ilike.%${query}%,specific_epithet.ilike.%${query}%,subspecific_epithet.ilike.%${query}%,scientific_name.ilike.%${query}%,common_name.ilike.%${query}%`)
-          .limit(10);
+          .not('scientific_name', 'is', null)
+          .limit(200);
 
-        if (error) throw error;
+        const [{ data: placeholderResults, error: placeholderError }, { data: speciesResults, error: speciesError }] = await Promise.all([
+          placeholderQuery,
+          speciesQuery,
+        ]);
+
+        if (placeholderError) throw placeholderError;
+        if (speciesError) throw speciesError;
+
+        const combined = [...(placeholderResults || []), ...(speciesResults || [])];
+
+        const q = query.toLowerCase();
         
-        // Add smart display names based on what matched
-        data = (results || []).map(item => {
-          const q = query.toLowerCase();
+        // Check if query looks like a complete species (contains space or matches specific_epithet pattern)
+        // Case-insensitive check - allows both upper and lowercase letters
+        const isCompleteSpeciesSearch = query.includes(' ') || /^[a-zA-Z]+$/.test(query);
+        
+        // Add smart display names and placeholder flag
+        let processedResults = (combined || []).map(item => {
           let display_name = '';
           let taxonomic_level = '';
+          
+          // A placeholder has no scientific_name (NULL, empty string, or whitespace only)
+          // Matches SQL: WHERE scientific_name IS NULL OR scientific_name = '' || ' '
+          const is_placeholder = !item.scientific_name || item.scientific_name.trim() === '' || item.scientific_name.trim() === ' ';
           
           // Check what field matched (in order of specificity)
           if (item.scientific_name?.toLowerCase().includes(q)) {
@@ -463,9 +584,48 @@ Deno.serve(async (req) => {
           return {
             ...item,
             display_name,
-            taxonomic_level
+            taxonomic_level,
+            is_placeholder
           };
         });
+        
+        // Filter results: Always show matching placeholders up to allowed levels
+        // For plants: division, family, genus
+        processedResults = processedResults.filter(item => {
+          if (item.is_placeholder) {
+            // Allow placeholders up to genus level
+            const allowedLevels = ['division', 'family', 'tribe', 'genus'];
+            return allowedLevels.includes(item.taxonomic_level);
+          }
+          // For non-placeholders (actual species), always show them
+          return true;
+        });
+        
+        // Sort so placeholders surface first, then by taxonomic depth, then name
+        const rank: Record<string, number> = {
+          division: 1,
+          family: 2,
+          genus: 3,
+          species: 4,
+          subspecies: 5,
+          common_name: 6,
+          unknown: 7,
+        };
+
+        processedResults.sort((a, b) => {
+          if (a.is_placeholder && !b.is_placeholder) return -1;
+          if (!a.is_placeholder && b.is_placeholder) return 1;
+
+          const ra = rank[a.taxonomic_level] || 99;
+          const rb = rank[b.taxonomic_level] || 99;
+          if (ra !== rb) return ra - rb;
+
+          const na = (a.display_name || a.scientific_name || a.genus || '').toLowerCase();
+          const nb = (b.display_name || b.scientific_name || b.genus || '').toLowerCase();
+          return na.localeCompare(nb);
+        });
+
+        data = processedResults.slice(0, 50); // Return top 50 after sorting
       }
 
       return new Response(
