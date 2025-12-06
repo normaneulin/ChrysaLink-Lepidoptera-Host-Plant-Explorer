@@ -127,6 +127,10 @@ async def predict(req: PredictRequest):
             resp.raise_for_status()
             img = Image.open(resp.raw).convert('RGB')
     except Exception as e:
+            @app.get("/health")
+            async def health_check():
+                """Simple health endpoint used by load balancers and Render to verify service is up."""
+                return {"status": "ok"}
         log.exception('Failed to load image: %s', e)
         raise HTTPException(status_code=400, detail=f'Failed to load image: {e}')
 
