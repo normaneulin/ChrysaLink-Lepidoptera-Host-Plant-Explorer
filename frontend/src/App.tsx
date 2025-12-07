@@ -23,11 +23,13 @@ export default function App() {
   const [userId, setUserId] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [isSessionChecked, setIsSessionChecked] = useState(false);
 
   useEffect(() => {
     // Check for existing session first
     const initializeAuth = async () => {
       await checkSession();
+      setIsSessionChecked(true);
     };
 
     initializeAuth();
@@ -60,14 +62,53 @@ export default function App() {
   }, [setLocation]);
 
   useEffect(() => {
-    // Fetch notification count when logged in
-    if (accessToken) {
+    // Fetch notification count when logged in and session is validated
+    if (accessToken && isSessionChecked) {
       fetchNotificationCount();
       // Poll for new notifications every 30 seconds
       const interval = setInterval(fetchNotificationCount, 30000);
       return () => clearInterval(interval);
     }
-  }, [accessToken]);
+  }, [accessToken, isSessionChecked]);
+
+  // Periodically refresh the access token to prevent expiration
+  useEffect(() => {
+    if (!accessToken) return;
+
+    const refreshToken = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error || !session?.user) {
+          // Session expired, clear auth
+          setAccessToken(null);
+          setUserId(null);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('userId');
+          setLocation('/auth');
+          return;
+        }
+
+        // Update token if it was refreshed
+        if (session.access_token !== accessToken) {
+          setAccessToken(session.access_token);
+          setUserId(session.user.id);
+          localStorage.setItem('accessToken', session.access_token);
+          localStorage.setItem('userId', session.user.id);
+        }
+      } catch (error) {
+        console.error('Token refresh error:', error);
+      }
+    };
+
+    // Refresh token every 45 minutes (tokens typically expire after 1 hour)
+    const interval = setInterval(refreshToken, 45 * 60 * 1000);
+    
+    // Also refresh immediately if token is close to expiration
+    refreshToken();
+
+    return () => clearInterval(interval);
+  }, [accessToken, setLocation]);
 
   /**
    * Check and validate existing user session on app load
@@ -141,6 +182,27 @@ export default function App() {
       if (response.success) {
         const unreadCount = response.data?.filter((n: any) => !n.read).length || 0;
         setNotificationCount(unreadCount);
+      } else if (response.status === 401) {
+        // Token expired or invalid, try to refresh
+        console.warn('Notification fetch returned 401, attempting token refresh');
+        try {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          if (error || !session?.user) {
+            // Session invalid, clear auth
+            setAccessToken(null);
+            setUserId(null);
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('userId');
+          } else if (session.access_token !== accessToken) {
+            // Token was refreshed, update state
+            setAccessToken(session.access_token);
+            setUserId(session.user.id);
+            localStorage.setItem('accessToken', session.access_token);
+            localStorage.setItem('userId', session.user.id);
+          }
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError);
+        }
       }
     } catch (error) {
       console.error('Error fetching notification count:', error);

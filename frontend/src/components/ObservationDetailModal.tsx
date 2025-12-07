@@ -547,12 +547,10 @@ export function ObservationDetailModal({
       }
 
       // Species level majority (2/3)
-      // Build species counts
+      // Build species counts - use vote counts from candidates, not identification counts
       const speciesCounts: Record<string, number> = {};
-      for (const it of list) {
-        const sp = (it.species || it.scientific_name || it.scientificName || '').toString();
-        if (!sp) continue;
-        speciesCounts[sp] = (speciesCounts[sp] || 0) + 1;
+      for (const candidate of arr.filter(c => c.type === t)) {
+        speciesCounts[candidate.species] = candidate.count; // use vote count from candidate
       }
       const entries = Object.entries(speciesCounts).sort((a, b) => b[1] - a[1]);
       const topSpecies = entries.length > 0 ? entries[0][0] : null;
@@ -1504,11 +1502,11 @@ export function ObservationDetailModal({
                       <Button
                         size="sm"
                         onClick={() => handleAcceptCommunityTaxon(communityForType)}
-                        disabled={!accessToken || !communityForType || (communityForType.count || 0) < acceptThreshold || isAccepting || alreadyAcceptedForCommunity}
+                        disabled={!accessToken || !communityForType || (communityForType?.count || 0) < acceptThreshold || isAccepting || alreadyAcceptedForCommunity}
                         title={
                           alreadyAcceptedForCommunity
                             ? 'You have already accepted this community taxon'
-                            : (!accessToken ? 'Please sign in to accept' : undefined)
+                            : (!accessToken ? 'Please sign in to accept' : (communityForType?.count || 0) < acceptThreshold ? `Need ${acceptThreshold} votes, have ${communityForType?.count || 0}` : undefined)
                         }
                       >
                         {isAccepting ? 'Accepting...' : 'Accept'}
