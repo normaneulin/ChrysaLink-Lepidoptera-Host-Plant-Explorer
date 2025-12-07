@@ -1321,7 +1321,15 @@ export function ObservationDetailModal({
               <div className="text-left">
                 <div className="font-bold text-gray-900 text-lg leading-tight">{lepName}</div>
                 <div className="text-sm text-gray-500 font-medium mt-1">
-                   {localObservation.lepidoptera?.identifications?.length || 0} identification(s)
+                   {(() => {
+                     const identifications = localObservation?.identifications || [];
+                     if (!Array.isArray(identifications)) return 0;
+                     const lepCount = identifications.filter((i: any) => {
+                       const typeRaw = String(i?.identificationType || i?.identification_type || i?.subtype || i?.type || '').toLowerCase();
+                       return !typeRaw.includes('plant') && !typeRaw.includes('host');
+                     }).length;
+                     return lepCount;
+                   })()} identification(s)
                 </div>
               </div>
             </div>
@@ -1342,7 +1350,15 @@ export function ObservationDetailModal({
               <div className="text-left">
                 <div className="font-bold text-gray-900 text-lg leading-tight">{plantName}</div>
                 <div className="text-sm text-gray-500 font-medium mt-1">
-                   {localObservation.hostPlant?.identifications?.length || 0} identification(s)
+                   {(() => {
+                     const identifications = localObservation?.identifications || [];
+                     if (!Array.isArray(identifications)) return 0;
+                     const plantCount = identifications.filter((i: any) => {
+                       const typeRaw = String(i?.identificationType || i?.identification_type || i?.subtype || i?.type || '').toLowerCase();
+                       return typeRaw.includes('plant') || typeRaw.includes('host');
+                     }).length;
+                     return plantCount;
+                   })()} identification(s)
                 </div>
               </div>
             </div>
@@ -1358,7 +1374,7 @@ export function ObservationDetailModal({
               <div className="flex flex-col ml-2 items-start">
                 <span className="font-bold text-base text-gray-900 text-left">{localObservation.user.username || localObservation.user.name || localObservation.user.fullName || 'Unknown User'}</span>
                 <span className="text-sm text-gray-500 font-medium text-left">
-                  {localObservation.user.observationCount || 0} observations
+                  {localObservation.user.observation_count || localObservation.user.observationCount || 0} observations
                 </span>
               </div>
               {/* Owner Actions */}

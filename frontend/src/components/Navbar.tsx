@@ -159,8 +159,8 @@ export function Navbar({ isLoggedIn, onLogout, notificationCount = 0, isLoggingO
               <div className="inline-block" ref={profileRef}>
                 <button onClick={toggleProfile} aria-label="Account menu" className="p-0 bg-transparent border-0">
                     <Avatar className="h-12 w-12 border-2 border-white shadow-sm mr-3">
-                      <AvatarImage src={profile?.avatar || profile?.avatar_url || user?.avatar || user?.avatar_url || '/navbar/profile.png'} />
-                      <AvatarFallback>{(profile?.name?.[0]?.toUpperCase()) || (user?.name?.[0]?.toUpperCase()) || (user?.username?.[0]?.toUpperCase()) || 'U'}</AvatarFallback>
+                      <AvatarImage src={profile?.avatar_url || profile?.avatar || user?.avatar || user?.avatar_url || '/navbar/profile.png'} />
+                      <AvatarFallback>{(profile?.username?.[0]?.toUpperCase()) || (profile?.name?.[0]?.toUpperCase()) || (user?.name?.[0]?.toUpperCase()) || (user?.username?.[0]?.toUpperCase()) || 'U'}</AvatarFallback>
                     </Avatar>
                 </button>
 
@@ -169,12 +169,12 @@ export function Navbar({ isLoggedIn, onLogout, notificationCount = 0, isLoggingO
                     <Link href="/profile" className="block">
                       <div className="flex items-center p-3 border-b" onClick={() => setProfileOpen(false)}>
                         <Avatar className="h-12 w-12 border-2 border-white shadow-sm mr-3 flex-shrink-0">
-                          <AvatarImage src={user?.avatar || user?.avatar_url || '/navbar/profile.png'} />
-                          <AvatarFallback className="uppercase">{user?.username?.[0] || user?.name?.[0] || 'U'}</AvatarFallback>
+                          <AvatarImage src={profile?.avatar_url || profile?.avatar || user?.avatar || user?.avatar_url || '/navbar/profile.png'} />
+                          <AvatarFallback className="uppercase">{(profile?.username?.[0]) || (profile?.name?.[0]) || (user?.username?.[0]) || (user?.name?.[0]) || 'U'}</AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col ml-2 items-start min-w-0">
-                          <span className="font-bold text-base text-gray-900 text-left max-w-[200px] truncate">{profile?.name || user?.username || user?.name || user?.fullName || 'Unknown User'}</span>
-                          <span className="text-sm text-gray-500 font-medium text-left">{profile?.observationCount ?? user?.observationCount ?? 0} observations</span>
+                          <span className="font-bold text-base text-gray-900 text-left max-w-[200px] truncate">{profile?.username || profile?.name || user?.username || user?.name || user?.fullName || 'Unknown User'}</span>
+                          <span className="text-sm text-gray-500 font-medium text-left">{profile?.observation_count ?? profile?.observationCount ?? user?.observationCount ?? 0} observations</span>
                         </div>
                       </div>
                     </Link>

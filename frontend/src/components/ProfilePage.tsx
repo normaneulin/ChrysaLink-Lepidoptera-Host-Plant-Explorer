@@ -148,6 +148,7 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
                   {ratingInfo.level}
                 </Badge>
               </div>
+              <p className="font-medium">{profile.username}</p>
               <p className="text-gray-600 mb-2">{profile.email}</p>
               
               {profile.bio && (
@@ -159,6 +160,7 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
                   <span className="font-medium">Member since:</span>{' '}
                   {new Date(profile.createdAt).toLocaleDateString()}
                 </div>
+                {/*
                 <div>
                   <span className="font-medium text-gray-900">{profile.followers}</span>{' '}
                   Followers
@@ -167,6 +169,7 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
                   <span className="font-medium text-gray-900">{profile.following}</span>{' '}
                   Following
                 </div>
+                */}
               </div>
             </div>
           </div>
@@ -221,7 +224,7 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Award className="h-5 w-5" />
-            Expertise Level & Rating System
+            Expertise Level
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -235,7 +238,7 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
             </div>
             <div className="flex items-center justify-between pb-3 border-b">
               <div>
-                <p className="font-medium">Beginner</p>
+                <p className="font-medium">Amateur</p>
                 <p className="text-sm text-gray-600">Learning the basics</p>
               </div>
               <Badge className="bg-yellow-500 text-white">5-19 points</Badge>
@@ -249,14 +252,14 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
             </div>
             <div className="flex items-center justify-between pb-3 border-b">
               <div>
-                <p className="font-medium">Advanced</p>
+                <p className="font-medium">Expert</p>
                 <p className="text-sm text-gray-600">Reliable identifier</p>
               </div>
               <Badge className="bg-blue-500 text-white">50-99 points</Badge>
             </div>
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-medium">Expert</p>
+                <p className="font-medium">Specialist</p>
                 <p className="text-sm text-gray-600">Community expert</p>
               </div>
               <Badge className="bg-purple-500 text-white">100+ points</Badge>
