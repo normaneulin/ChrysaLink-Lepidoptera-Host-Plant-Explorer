@@ -1,14 +1,29 @@
-torchvision
-fastapi
-uvicorn[standard]
-Pillow
-requests
-huggingface-hub
-timm
-numpy
-transformers>=4.30.0
-yacs
-pycocotools
+# Core web framework and server
+fastapi>=0.95.0
+uvicorn[standard]>=0.22.0
+pydantic>=1.10.0
 
-# NOTE: torch is intentionally NOT included here due to large wheel sizes.
-# Install torch separately for your platform using the official instructions.
+# Image processing and ML
+Pillow>=9.5.0
+numpy>=1.24.0
+requests>=2.30.0
+
+# Hugging Face and model utilities
+huggingface-hub>=0.14.0
+transformers>=4.29.0
+tokenizers>=0.13.0
+safetensors>=0.3.0
+
+# Vision models (timm for model architectures)
+timm>=0.9.0
+
+# Config and data utilities
+yacs>=0.1.8
+pycocotools>=2.0.6
+tqdm>=4.65.0
+
+# YAML support
+PyYAML>=6.0
+
+# NOTE: torch and torchvision are intentionally NOT included here due to large wheel sizes.
+# Install torch separately for your platform using the official instructions (see build command).
