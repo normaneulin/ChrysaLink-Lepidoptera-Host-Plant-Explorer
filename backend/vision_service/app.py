@@ -35,64 +35,77 @@ CFG_FILE = os.environ.get('HF_CONFIG_FILE', 'MetaFG_2_384_inat.yaml')
 NAMES_FILE = os.environ.get('HF_NAMES_FILE', 'inat_sgd_names.txt')
 HUGGINGFACE_TOKEN = os.environ.get('HUGGINGFACE_TOKEN')
 
-# On startup: download model/config/names if not present and initialize Inference
+# Lazy-loaded inference model (load on first request to avoid OOM on startup)
 inference_model: Optional[Inference] = None
+model_init_lock = asyncio.Lock()
 
 class PredictRequest(BaseModel):
     imageUrl: Optional[str] = None
     imageBase64: Optional[str] = None
     top_k: Optional[int] = 10
 
-# --- HEALTH CHECK ENDPOINT (Moved to top level) ---
+# --- HEALTH CHECK ENDPOINT ---
 @app.get("/health")
 async def health_check():
     """Simple health endpoint used by load balancers and Render to verify service is up."""
     return {"status": "ok"}
 
-@app.on_event('startup')
-async def startup_event():
+async def ensure_model_loaded():
+    """Lazy-load the model on first request to avoid OOM during startup."""
     global inference_model
-    # Download files via hf_hub_download if not already present
-    try:
-        log.info('Starting model setup...')
-        token = HUGGINGFACE_TOKEN
-        if not token:
-            log.warning('HUGGINGFACE_TOKEN not set; hf_hub_download may fail for private models')
+    
+    if inference_model is not None:
+        return
+    
+    async with model_init_lock:
+        # Double-check pattern: another coroutine may have loaded while we waited for the lock
+        if inference_model is not None:
+            return
+        
+        try:
+            log.info('Lazy-loading model on first request...')
+            token = HUGGINGFACE_TOKEN
+            if not token:
+                log.warning('HUGGINGFACE_TOKEN not set; hf_hub_download may fail for private models')
 
+            # Ensure the vendored directory exists and download missing files if needed
+            NATURALIA_DIR.mkdir(parents=True, exist_ok=True)
+            import shutil
 
-        # Ensure the vendored directory exists and download missing files into it
-        NATURALIA_DIR.mkdir(parents=True, exist_ok=True)
-        import shutil
-
-        def _fetch_to_vendor(filename):
-            dest = NATURALIA_DIR / filename
-            if dest.exists():
+            def _fetch_to_vendor(filename):
+                dest = NATURALIA_DIR / filename
+                if dest.exists():
+                    return str(dest)
+                if hf_hub_download is None:
+                    raise RuntimeError('huggingface_hub not available to download files')
+                log.info(f'Downloading {filename}...')
+                downloaded = hf_hub_download(repo_id=HF_REPO, filename=filename, token=token)
+                shutil.copy(downloaded, dest)
+                log.info(f'Downloaded {filename} to {dest}')
                 return str(dest)
-            if hf_hub_download is None:
-                raise RuntimeError('huggingface_hub not available to download files')
-            downloaded = hf_hub_download(repo_id=HF_REPO, filename=filename, token=token)
-            shutil.copy(downloaded, dest)
-            return str(dest)
 
-        model_path = _fetch_to_vendor(MODEL_FILE)
-        cfg_path = _fetch_to_vendor(CFG_FILE)
-        names_path = _fetch_to_vendor(NAMES_FILE)
+            model_path = _fetch_to_vendor(MODEL_FILE)
+            cfg_path = _fetch_to_vendor(CFG_FILE)
+            names_path = _fetch_to_vendor(NAMES_FILE)
 
-        log.info(f'Model path: {model_path}, cfg: {cfg_path}, names: {names_path}')
+            log.info(f'Model path: {model_path}, cfg: {cfg_path}, names: {names_path}')
 
-        # Initialize the Inference class (this can be slow)
-        loop = asyncio.get_event_loop()
-        def init():
-            return Inference(config_path=cfg_path, model_path=model_path, names_path=names_path)
-        inference_model = await loop.run_in_executor(None, init)
-        log.info('Inference model loaded and ready')
-    except Exception as e:
-        log.exception('Failed to initialize model: %s', e)
-        # don't raise here; startup should continue but predictions will error
-        inference_model = None
+            # Initialize the Inference class (this can be slow ~30-60s)
+            loop = asyncio.get_event_loop()
+            def init():
+                return Inference(config_path=cfg_path, model_path=model_path, names_path=names_path)
+            inference_model = await loop.run_in_executor(None, init)
+            log.info('Inference model loaded and ready')
+        except Exception as e:
+            log.exception('Failed to initialize model: %s', e)
+            inference_model = None
+            raise
 
 @app.post('/predict')
 async def predict(req: PredictRequest):
+    # Lazy-load model on first request
+    await ensure_model_loaded()
+    
     if inference_model is None:
         # If model failed to initialize, allow a MOCK_MODE to return deterministic sample predictions
         mock_mode = os.environ.get('MOCK_MODE', '').lower() in ('1', 'true', 'yes')
