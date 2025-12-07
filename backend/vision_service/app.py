@@ -44,7 +44,12 @@ class PredictRequest(BaseModel):
     imageBase64: Optional[str] = None
     top_k: Optional[int] = 10
 
-# --- HEALTH CHECK ENDPOINT ---
+# --- HEALTH CHECK ENDPOINTS ---
+@app.get("/")
+async def root():
+    """Root endpoint for Render health probes."""
+    return {"status": "ok", "service": "iNat Vision Service", "endpoints": ["/health", "/predict"]}
+
 @app.get("/health")
 async def health_check():
     """Simple health endpoint used by load balancers and Render to verify service is up."""
