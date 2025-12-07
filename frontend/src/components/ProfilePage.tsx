@@ -50,8 +50,8 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
           followers: response.data?.followers || 0,
           following: response.data?.following || 0,
           observationCount: response.data?.observation_count || 0,
-          speciesAcceptedCount: response.data?.species_accepted_count || 0,
-          identificationsAgreedCount: response.data?.identifications_agreed_count || 0,
+          speciesAcceptedCount: response.data?.validated_species || 0,
+          identificationsAgreedCount: response.data?.validated_identifications || 0,
           createdAt: response.data?.created_at
         });
       } else if (response.error && userId) {
@@ -115,8 +115,8 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
           followers: data?.followers || 0,
           following: data?.following || 0,
           observationCount: data?.observation_count || 0,
-          speciesAcceptedCount: data?.species_accepted_count || 0,
-          identificationsAgreedCount: data?.identifications_agreed_count || 0,
+          speciesAcceptedCount: data?.validated_species || 0,
+          identificationsAgreedCount: data?.validated_identifications || 0,
           createdAt: data?.created_at
         });
       }

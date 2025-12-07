@@ -281,7 +281,7 @@ export default function App() {
 
           <Route path="/notifications">
             {isLoggedIn && accessToken ? (
-              <NotificationsPage accessToken={accessToken} onNotificationRead={(id?: string) => setNotificationCount((c) => Math.max(0, c - 1))} />
+              <NotificationsPage accessToken={accessToken} userId={userId || undefined} onNotificationRead={(id?: string) => setNotificationCount((c) => Math.max(0, c - 1))} />
             ) : (
               <AuthPage onAuthSuccess={handleAuthSuccess} />
             )}

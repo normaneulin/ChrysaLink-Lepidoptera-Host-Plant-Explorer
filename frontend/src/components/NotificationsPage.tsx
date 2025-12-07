@@ -21,10 +21,11 @@ interface Notification {
 
 interface NotificationsPageProps {
   accessToken: string;
+  userId?: string;
   onNotificationRead?: (id?: string) => void;
 }
 
-export function NotificationsPage({ accessToken, onNotificationRead }: NotificationsPageProps) {
+export function NotificationsPage({ accessToken, userId, onNotificationRead }: NotificationsPageProps) {
   const [, setLocation] = useLocation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -204,6 +205,7 @@ export function NotificationsPage({ accessToken, onNotificationRead }: Notificat
           isOpen={!!selectedObservation}
           onClose={() => setSelectedObservation(null)}
           accessToken={accessToken}
+          currentUserId={userId}
           onUpdate={fetchNotifications}
         />
       )}

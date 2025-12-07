@@ -85,8 +85,8 @@ BEGIN
   -- Get user statistics
   SELECT 
     COALESCE(COUNT(DISTINCT o.id), 0),
-    COALESCE(COUNT(DISTINCT CASE WHEN i.status = 'verified' THEN i.id END), 0),
-    COALESCE(COUNT(DISTINCT i.species_id), 0),
+    COALESCE(COUNT(DISTINCT CASE WHEN i.is_verified = true THEN i.id END), 0),
+    COALESCE(COUNT(DISTINCT i.species), 0),
     COALESCE(rs.current_rating, 0)
   INTO v_observations_count, v_verified_identifications, v_species_documented, v_current_rating
   FROM observations o
