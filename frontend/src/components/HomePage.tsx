@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
-import { Search } from 'lucide-react';
+import { Search, Home } from 'lucide-react';
 import { ObservationDetailModal } from './ObservationDetailModal';
 import { toast } from 'sonner';
 import { apiClient } from '../api/client';
@@ -119,7 +119,12 @@ export function HomePage({ accessToken, userId }: { accessToken?: string | null;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <h1 className="text-2xl mb-4">Home Feed</h1>
+      <div className="mb-6">
+        <h1 className="text-3xl mb-2 flex items-center gap-3">
+          <Home className="h-8 w-8" />
+          Home Feed
+        </h1>
+      </div>
 
       {isLoading ? (
         <p>Loading...</p>

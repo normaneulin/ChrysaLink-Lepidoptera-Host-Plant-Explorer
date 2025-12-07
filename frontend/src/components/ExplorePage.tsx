@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { Badge } from './ui/badge';
-import { Search, MapPin, Calendar, MessageSquare, ChevronDown } from 'lucide-react';
+import { Search, MapPin, Calendar, MessageSquare, ChevronDown, Compass, UserCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -432,7 +432,12 @@ export function ExplorePage({ accessToken, userId, showOnlyUserObservations = fa
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-3xl mb-4">
+        <h1 className="text-3xl mb-4 flex items-center gap-3">
+          {showOnlyUserObservations ? (
+            <UserCircle className="h-8 w-8" />
+          ) : (
+            <Compass className="h-8 w-8" />
+          )}
           {showOnlyUserObservations ? 'Your Observations' : 'Explore Observations'}
         </h1>
         

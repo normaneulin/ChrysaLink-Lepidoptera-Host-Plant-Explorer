@@ -1,0 +1,29 @@
+create table public.profiles (
+  id uuid not null,
+  name text not null,
+  bio text null,
+  followers integer null default 0,
+  following integer null default 0,
+  observation_count integer null default 0,
+  species_accepted_count integer null default 0,
+  identifications_agreed_count integer null default 0,
+  avatar_url text null,
+  created_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone null default CURRENT_TIMESTAMP,
+  username text null,
+  email text null,
+  constraint profiles_pkey primary key (id),
+  constraint profiles_email_key unique (email),
+  constraint profiles_username_key unique (username),
+  constraint profiles_id_fkey foreign KEY (id) references auth.users (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_profiles_created_at on public.profiles using btree (created_at desc) TABLESPACE pg_default;
+
+create index IF not exists idx_profiles_username on public.profiles using btree (username) TABLESPACE pg_default;
+
+create index IF not exists idx_profiles_email on public.profiles using btree (email) TABLESPACE pg_default;
+
+create trigger update_profiles_updated_at BEFORE
+update on profiles for EACH row
+execute FUNCTION update_updated_at_column ();

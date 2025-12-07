@@ -9,6 +9,7 @@ import {
 } from './ui/dialog';
 import * as RadixDialog from '@radix-ui/react-dialog';
 import { Button } from './ui/button';
+import { EditObservationModal } from './EditObservationModal';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -280,6 +281,8 @@ export function ObservationDetailModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localObservation, setLocalObservation] = useState(observation);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [hideDetailModal, setHideDetailModal] = useState(false);
   
   // Suggestion State
   const [suggestSpecies, setSuggestSpecies] = useState('');
@@ -300,6 +303,13 @@ export function ObservationDetailModal({
   useEffect(() => {
     setLocalObservation(observation);
   }, [observation]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setHideDetailModal(false);
+      setIsEditOpen(false);
+    }
+  }, [isOpen]);
 
   // When modal opens or observation changes, fetch latest details and comments
   useEffect(() => {
@@ -903,6 +913,12 @@ export function ObservationDetailModal({
     }
   };
 
+  const handleEditSuccess = async () => {
+    await fetchObservationDetails();
+    await fetchCommentsFromSupabase();
+    onUpdate();
+  };
+
   const handleAddComment = async () => {
     if (!comment.trim() || !accessToken) return;
     setIsSubmitting(true);
@@ -1277,12 +1293,13 @@ export function ObservationDetailModal({
   const submittedDate = localObservation.created_at ? new Date(localObservation.created_at) : null;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent
-        className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0"
-        aria-labelledby="observation-dialog-title"
-        aria-describedby="observation-dialog-description"
-      >
+    <>
+      <Dialog open={isOpen && !hideDetailModal} onOpenChange={onClose}>
+        <DialogContent
+          className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0"
+          aria-labelledby="observation-dialog-title"
+          aria-describedby="observation-dialog-description"
+        >
         <RadixDialog.Title id="observation-dialog-title" style={{position: 'absolute', width: '1px', height: '1px', padding: 0, margin: '-1px', overflow: 'hidden', clip: 'rect(0,0,0,0)', border: 0}}>
           Observation Details
         </RadixDialog.Title>
@@ -1379,8 +1396,16 @@ export function ObservationDetailModal({
               </div>
               {/* Owner Actions */}
               {currentUserId === localObservation.user.id && (
-                <Button variant="ghost" size="sm" className="ml-auto text-red-500 hover:text-red-600 hover:bg-red-50" onClick={handleDelete}>
-                  Delete
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => {
+                    setHideDetailModal(true);
+                    setIsEditOpen(true);
+                  }}
+                >
+                  Edit
                 </Button>
               )}
             </div>
@@ -1728,7 +1753,20 @@ export function ObservationDetailModal({
           </div>
 
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+
+      <EditObservationModal
+        isOpen={isEditOpen}
+        onClose={() => {
+          setIsEditOpen(false);
+          onClose();
+        }}
+        accessToken={accessToken}
+        observation={localObservation}
+        onSuccess={handleEditSuccess}
+        onDelete={handleDelete}
+      />
+    </>
   );
 }

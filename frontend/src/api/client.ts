@@ -701,6 +701,223 @@ class FrontendApiClient {
       };
     }
   }
+
+  /**
+   * Get user's badge information and total points
+   */
+  async getUserBadge(userId: string): Promise<ApiResponse> {
+    try {
+      const { data, error } = await supabase
+        .from('rating_systems')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('Badge fetch error:', error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      // Get total points
+      const { data: pointsData, error: pointsError } = await supabase
+        .from('points_ledger')
+        .select('points_amount')
+        .eq('user_id', userId);
+
+      const totalPoints = pointsError ? 0 : (pointsData || []).reduce((sum: number, row: any) => sum + row.points_amount, 0);
+
+      return {
+        success: true,
+        data: {
+          ...data,
+          totalPoints,
+        },
+      };
+    } catch (error: any) {
+      console.error('Exception in getUserBadge:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch badge information',
+      };
+    }
+  }
+
+  /**
+   * Get user's achievements
+   */
+  async getUserAchievements(userId: string): Promise<ApiResponse> {
+    try {
+      const { data, error } = await supabase
+        .from('user_achievements')
+        .select(`
+          id,
+          unlocked_at,
+          achievement:achievements (
+            id,
+            name,
+            description,
+            icon_url,
+            points_reward
+          )
+        `)
+        .eq('user_id', userId)
+        .order('unlocked_at', { ascending: false });
+
+      if (error) {
+        console.error('Achievements fetch error:', error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: data || [],
+      };
+    } catch (error: any) {
+      console.error('Exception in getUserAchievements:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch achievements',
+      };
+    }
+  }
+
+  /**
+   * Get unread notifications for user
+   */
+  async getUnreadNotifications(userId: string): Promise<ApiResponse> {
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_read', false)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Notifications fetch error:', error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: data || [],
+      };
+    } catch (error: any) {
+      console.error('Exception in getUnreadNotifications:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch notifications',
+      };
+    }
+  }
+
+  /**
+   * Mark a notification as read
+   */
+  async markNotificationAsRead(notificationId: string): Promise<ApiResponse> {
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId)
+        .select();
+
+      if (error) {
+        console.error('Mark notification error:', error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+        data,
+      };
+    } catch (error: any) {
+      console.error('Exception in markNotificationAsRead:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to mark notification as read',
+      };
+    }
+  }
+
+  /**
+   * Get all notifications for user (with pagination)
+   */
+  async getAllNotifications(userId: string, limit: number = 20, offset: number = 0): Promise<ApiResponse> {
+    try {
+      const { data, error, count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) {
+        console.error('Get all notifications error:', error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: {
+          notifications: data || [],
+          total: count || 0,
+        },
+      };
+    } catch (error: any) {
+      console.error('Exception in getAllNotifications:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch notifications',
+      };
+    }
+  }
+
+  /**
+   * Get badge thresholds/levels
+   */
+  async getBadgeThresholds(): Promise<ApiResponse> {
+    try {
+      const { data, error } = await supabase
+        .from('badge_thresholds')
+        .select('*')
+        .order('min_points', { ascending: true });
+
+      if (error) {
+        console.error('Badge thresholds fetch error:', error);
+        return {
+          success: false,
+          error: error.message,
+        };
+      }
+
+      return {
+        success: true,
+        data: data || [],
+      };
+    } catch (error: any) {
+      console.error('Exception in getBadgeThresholds:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to fetch badge thresholds',
+      };
+    }
+  }
 }
 
 export const apiClient = new FrontendApiClient();

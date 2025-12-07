@@ -4,8 +4,19 @@ import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import { Skeleton } from './ui/skeleton';
-import { User, Award, TrendingUp, Camera } from 'lucide-react';
+import { User, Award, TrendingUp, Camera, Trophy, Star } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { AchievementsList } from './AchievementsList';
+import { BadgeNotificationPopup } from './BadgeNotificationPopup';
+
+interface BadgeThreshold {
+  id: string;
+  level: string;
+  min_points: number;
+  max_points?: number;
+  description: string;
+  color: string;
+}
 
 interface ProfilePageProps {
   accessToken: string;
@@ -14,11 +25,15 @@ interface ProfilePageProps {
 
 export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
   const [profile, setProfile] = useState<any>(null);
+  const [badge, setBadge] = useState<any>(null);
+  const [badgeThresholds, setBadgeThresholds] = useState<BadgeThreshold[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (userId) {
       fetchProfile();
+      fetchBadge();
+      fetchBadgeThresholds();
     }
   }, [userId]);
 
@@ -35,8 +50,8 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
           followers: response.data?.followers || 0,
           following: response.data?.following || 0,
           observationCount: response.data?.observation_count || 0,
-          validatedSpecies: response.data?.validated_species || 0,
-          validatedIdentifications: response.data?.validated_identifications || 0,
+          speciesAcceptedCount: response.data?.species_accepted_count || 0,
+          identificationsAgreedCount: response.data?.identifications_agreed_count || 0,
           createdAt: response.data?.created_at
         });
       } else if (response.error && userId) {
@@ -48,6 +63,28 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
       console.error('Error fetching profile:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchBadge = async () => {
+    try {
+      const response = await apiClient.getUserBadge(userId || '');
+      if (response.success && response.data) {
+        setBadge(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching badge:', error);
+    }
+  };
+
+  const fetchBadgeThresholds = async () => {
+    try {
+      const response = await apiClient.getBadgeThresholds();
+      if (response.success && response.data) {
+        setBadgeThresholds(response.data as BadgeThreshold[]);
+      }
+    } catch (error) {
+      console.error('Error fetching badge thresholds:', error);
     }
   };
 
@@ -78,8 +115,8 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
           followers: data?.followers || 0,
           following: data?.following || 0,
           observationCount: data?.observation_count || 0,
-          validatedSpecies: data?.validated_species || 0,
-          validatedIdentifications: data?.validated_identifications || 0,
+          speciesAcceptedCount: data?.species_accepted_count || 0,
+          identificationsAgreedCount: data?.identifications_agreed_count || 0,
           createdAt: data?.created_at
         });
       }
@@ -121,33 +158,56 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
     );
   }
 
-  const getRatingLevel = (rating: number) => {
-    if (rating >= 100) return { level: 'Expert', color: 'bg-purple-500' };
-    if (rating >= 50) return { level: 'Advanced', color: 'bg-blue-500' };
-    if (rating >= 20) return { level: 'Intermediate', color: 'bg-green-500' };
-    if (rating >= 5) return { level: 'Beginner', color: 'bg-yellow-500' };
+  const getRatingLevel = (points: number = 0): { level: string; color: string } => {
+    const threshold = badgeThresholds.find(
+      (t) => points >= t.min_points && (t.max_points === null || points <= t.max_points)
+    );
+    
+    if (threshold) {
+      const colorMap: { [key: string]: string } = {
+        gray: 'bg-gray-500',
+        yellow: 'bg-yellow-500',
+        green: 'bg-green-500',
+        blue: 'bg-blue-500',
+        purple: 'bg-purple-500',
+      };
+      return {
+        level: threshold.level,
+        color: colorMap[threshold.color] || 'bg-gray-500',
+      };
+    }
+    
     return { level: 'Novice', color: 'bg-gray-500' };
   };
 
-  const ratingInfo = getRatingLevel(profile.rating || 0);
+  const ratingInfo = getRatingLevel(badge?.totalPoints || 0);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <BadgeNotificationPopup userId={userId || ''} accessToken={accessToken} />
+      
       <Card className="mb-6">
         <CardContent className="pt-6">
           <div className="flex items-start gap-6">
             <Avatar className="h-24 w-24">
               <AvatarFallback className="text-3xl">
-                {profile.name?.[0]?.toUpperCase() || 'U'}
+                {profile.username?.[0]?.toUpperCase() || 'U'}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-3 mb-2 flex-wrap">
                 <h1 className="text-3xl">{profile.name}</h1>
-                <Badge className={`${ratingInfo.color} text-white`}>
+                <Badge className={`${ratingInfo.color} text-white flex items-center gap-1`}>
+                  <Star className="h-4 w-4" />
                   {ratingInfo.level}
                 </Badge>
+                {badge?.totalPoints !== undefined && (
+                  <Badge variant="outline" className="border-blue-300 bg-blue-50">
+                    {badge.totalPoints} points
+                  </Badge>
+                )}
               </div>
+              
               <p className="font-medium">{profile.username}</p>
               <p className="text-gray-600 mb-2">{profile.email}</p>
               
@@ -186,6 +246,9 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
           </CardHeader>
           <CardContent>
             <p className="text-3xl">{profile.observationCount}</p>
+            <p className="text-sm text-gray-600 mt-2">
+              Total number of observations
+            </p>
           </CardContent>
         </Card>
 
@@ -193,13 +256,13 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Award className="h-5 w-5 text-green-600" />
-              Species
+              Validated Species 
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl">{profile.validatedSpecies}</p>
+            <p className="text-3xl">{profile.speciesAcceptedCount}</p>
             <p className="text-sm text-gray-600 mt-2">
-              Validated observation entries
+              Verified species
             </p>
           </CardContent>
         </Card>
@@ -208,74 +271,98 @@ export function ProfilePage({ accessToken, userId }: ProfilePageProps) {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-green-600" />
-              Identifications
+              Verified Identifications
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl">{profile.validatedIdentifications}</p>
+            <p className="text-3xl">{profile.identificationsAgreedCount}</p>
             <p className="text-sm text-gray-600 mt-2">
-              Validated suggested IDs
+              My community-accepted identifications
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Award className="h-5 w-5" />
-            Expertise Level
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div>
-                <p className="font-medium">Novice</p>
-                <p className="text-sm text-gray-600">Starting out</p>
-              </div>
-              <Badge className="bg-gray-500 text-white">0-4 points</Badge>
-            </div>
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div>
-                <p className="font-medium">Amateur</p>
-                <p className="text-sm text-gray-600">Learning the basics</p>
-              </div>
-              <Badge className="bg-yellow-500 text-white">5-19 points</Badge>
-            </div>
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div>
-                <p className="font-medium">Intermediate</p>
-                <p className="text-sm text-gray-600">Developing expertise</p>
-              </div>
-              <Badge className="bg-green-500 text-white">20-49 points</Badge>
-            </div>
-            <div className="flex items-center justify-between pb-3 border-b">
-              <div>
-                <p className="font-medium">Expert</p>
-                <p className="text-sm text-gray-600">Reliable identifier</p>
-              </div>
-              <Badge className="bg-blue-500 text-white">50-99 points</Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Specialist</p>
-                <p className="text-sm text-gray-600">Community expert</p>
-              </div>
-              <Badge className="bg-purple-500 text-white">100+ points</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <AchievementsList userId={userId || ''} accessToken={accessToken} />
 
-      <div className="mt-6 p-6 bg-blue-50 rounded-lg border border-blue-200">
-        <h3 className="font-semibold mb-2">How to Increase Your Rating</h3>
-        <ul className="space-y-2 text-sm text-gray-700">
-          <li>• Suggest species identifications on observations</li>
-          <li>• Have your identifications verified by the community</li>
-          <li>• Each verified identification earns you 1 rating point</li>
-          <li>• Higher ratings increase your credibility in the community</li>
-        </ul>
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trophy className="h-5 w-5" />
+              Badge Levels & Point Ranges
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {badgeThresholds.length > 0 ? (
+                badgeThresholds.map((threshold) => {
+                  const colorMap: { [key: string]: string } = {
+                    gray: 'bg-gray-100 border-gray-300',
+                    yellow: 'bg-yellow-100 border-yellow-300',
+                    green: 'bg-green-100 border-green-300',
+                    blue: 'bg-blue-100 border-blue-300',
+                    purple: 'bg-purple-100 border-purple-300',
+                  };
+                  const badgeColorMap: { [key: string]: string } = {
+                    gray: 'bg-gray-500',
+                    yellow: 'bg-yellow-500',
+                    green: 'bg-green-500',
+                    blue: 'bg-blue-500',
+                    purple: 'bg-purple-500',
+                  };
+                  return (
+                    <div
+                      key={threshold.id}
+                      className={`p-4 border-2 rounded-lg ${colorMap[threshold.color]}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            {threshold.level}
+                          </p>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {threshold.description}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <Badge
+                            className={`text-white`}
+                          >
+                            {threshold.min_points}-
+                            {threshold.max_points || '∞'} pts
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="text-gray-500 text-center py-8">
+                  Loading badge information...
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>How to Increase Your Badge Level</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2 text-sm text-gray-700">
+              <li>• Upload observations to earn points</li>
+              <li>• Suggest species identifications on observations</li>
+              <li>• Have your identifications verified by the community</li>
+              <li>• Complete achievements to earn bonus points</li>
+              <li>• Higher points unlock higher badge levels and unlock achievements</li>
+              <li>• Get notified when you unlock new badges and achievements!</li>
+            </ul>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

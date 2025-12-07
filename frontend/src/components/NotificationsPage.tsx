@@ -5,7 +5,7 @@ import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
-import { Bell, MessageSquare, CheckCircle, Award } from 'lucide-react';
+import { Bell, MessageSquare, CheckCircle, Award, BellRing } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '../api/client';
 
@@ -122,7 +122,8 @@ export function NotificationsPage({ accessToken, onNotificationRead }: Notificat
     <div className="container mx-auto px-4 py-8 max-w-3xl">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl">Notifications</h1>
+          <BellRing className="h-8 w-8 text-yellow-600" />
+          <h1 className="text-3xl font-semibold">Notifications</h1>
           {unreadCount > 0 && (
             <Badge variant="secondary">
               {unreadCount} new
