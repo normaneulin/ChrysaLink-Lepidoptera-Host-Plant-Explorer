@@ -78,13 +78,25 @@ interface Props {
 const TaxonNode = React.memo(({ data }: { data: any }) => {
   const svgPath = getSvgPath(data.division);
   const color = data.type === 'lepidoptera' ? '#FFD700' : '#4ADE80';
+  const sizeConfig: Record<string, { container: number, circle: number, image: number }> = {
+    
+    division: { container: 165, circle: 125, image: 120 },
+    family: { container: 125, circle: 85, image: 80 },
+    genus: { container: 85, circle: 65, image: 60 },
+    species: { container: 65, circle: 45, image: 40 }
+  };
+
+  const sizes = sizeConfig[data.level] || sizeConfig.species; 
 
   return (
     <div 
       className="taxon-node-inner"
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        width: '80px', height: '80px', cursor: 'pointer', position: 'relative'
+        width: `${sizes.container}px`, 
+        height: `${sizes.container}px`, 
+        cursor: 'pointer', 
+        position: 'relative'
       }}
     >
       {/* Label Badge */}
@@ -93,7 +105,10 @@ const TaxonNode = React.memo(({ data }: { data: any }) => {
         backgroundColor: 'rgba(255, 255, 255, 0.95)',
         padding: '3px 8px', borderRadius: '6px',
         border: '1px solid #ddd', boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        fontSize: '9px', fontWeight: 'bold', textTransform: 'uppercase', 
+        fontSize: '9px', 
+        fontWeight: data.level === 'species' ? 'normal' : 'bold',
+        textTransform: data.level === 'species' ? 'none' : 'capitalize',
+        fontStyle: data.level === 'species' ? 'italic' : 'normal',
         color: '#444', whiteSpace: 'nowrap', zIndex: 10,
         pointerEvents: 'none'
       }}>
@@ -102,7 +117,9 @@ const TaxonNode = React.memo(({ data }: { data: any }) => {
 
       {/* Circle Image */}
       <div style={{
-        width: '60px', height: '60px', borderRadius: '50%',
+        width: `${sizes.circle}px`, 
+        height: `${sizes.circle}px`, 
+        borderRadius: '50%',
         backgroundColor: 'white', border: `3px solid ${color}`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         boxShadow: '0 4px 8px rgba(0,0,0,0.1)', overflow: 'hidden',
@@ -112,7 +129,7 @@ const TaxonNode = React.memo(({ data }: { data: any }) => {
         <img 
           src={svgPath} 
           alt={data.label} 
-          style={{ width: '40px', height: '40px', objectFit: 'contain' }} 
+          style={{ width: `${sizes.image}px`, height: `${sizes.image}px`, objectFit: 'contain' }} 
         />
       </div>
 
@@ -146,7 +163,7 @@ const BackgroundRingsNode = React.memo(() => {
               cx="0" cy="0" r={radius} 
               fill="none" 
               stroke="#cbd5e1" 
-              strokeWidth={level === 'division' ? 2 : 1}
+              strokeWidth={level === 'division' ? 3 : 3}
               strokeDasharray={level === 'division' ? '0' : '6 3'}
               opacity={0.5}
             />
@@ -176,7 +193,8 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
   
   const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(new Set());
   const [historyStack, setHistoryStack] = useState<Array<{ parentId: string, childrenIds: string[] }>>([]);
-  const [animationOrigin, setAnimationOrigin] = useState<{ parentId: string, x: number, y: number } | null>(null);
+  const [animatingNodes, setAnimatingNodes] = useState<Map<string, { x: number, y: number }>>(new Map());
+  const [hoveredEdge, setHoveredEdge] = useState<string | null>(null);
 
   // 1. Build Hierarchy
   const hierarchy = useMemo(() => {
@@ -243,11 +261,12 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
     const children = hierarchy.filter(n => n.parentId === data.id && n.level === nextLevel);
 
     if (children.length > 0) {
-      setAnimationOrigin({
-        parentId: data.id,
-        x: node.position.x,
-        y: node.position.y
+      // Store each child's starting position as the parent's current position
+      const newAnimatingNodes = new Map<string, { x: number, y: number }>();
+      children.forEach(c => {
+        newAnimatingNodes.set(c.id, { x: node.position.x, y: node.position.y });
       });
+      setAnimatingNodes(newAnimatingNodes);
 
       setHistoryStack(prev => [...prev, { parentId: data.id, childrenIds: children.map(c => c.id) }]);
       setVisibleNodeIds(prev => {
@@ -261,13 +280,13 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
 
   // 4. Animation Effect
   useEffect(() => {
-    if (animationOrigin) {
+    if (animatingNodes.size > 0) {
       const timer = setTimeout(() => {
-        setAnimationOrigin(null);
+        setAnimatingNodes(new Map());
       }, 50); 
       return () => clearTimeout(timer);
     }
-  }, [animationOrigin]);
+  }, [animatingNodes]);
 
   // 5. Merge Back Handler
   const handleCanvasClick = useCallback(() => {
@@ -293,7 +312,7 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
     nodes.push({
       id: 'bg-rings-fixed',
       type: 'bgRings',
-      position: { x: GRAPH_X_OFFSET, y: GRAPH_Y_OFFSET },
+      position: { x: GRAPH_X_OFFSET+75, y: GRAPH_Y_OFFSET+75 },
       data: {},
       zIndex: -1,
       draggable: false,
@@ -330,10 +349,11 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
         let finalX = targetX;
         let finalY = targetY;
 
-        // Animation override: start at parent's old position
-        if (animationOrigin && item.parentId === animationOrigin.parentId) {
-          finalX = animationOrigin.x;
-          finalY = animationOrigin.y;
+        // Animation override: check if this node is currently animating from parent position
+        if (animatingNodes.has(item.id)) {
+          const startPos = animatingNodes.get(item.id)!;
+          finalX = startPos.x;
+          finalY = startPos.y;
         }
 
         nodes.push({
@@ -370,21 +390,27 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
         if (sourceVis && targetVis && sourceVis !== targetVis) {
             const edgeId = `e-${sourceVis}-${targetVis}`;
             if (!edges.find(ed => ed.id === edgeId)) {
+                const isHovered = hoveredEdge === edgeId;
                 edges.push({
                     id: edgeId,
                     source: sourceVis,
                     target: targetVis,
                     type: 'straight',
                     animated: true,
-                    style: { stroke: '#b0bec5', strokeWidth: 1.5, opacity: 0.6 },
-                    zIndex: 0
+                    style: { 
+                      stroke: isHovered ? '#3b82f6' : '#b0bec5', 
+                      strokeWidth: isHovered ? 3 : 1.5, 
+                      opacity: isHovered ? 1 : 0.6,
+                      transition: 'all 0.2s ease'
+                    },
+                    zIndex: isHovered ? 100 : 0
                 });
             }
         }
     });
 
     return { rfNodes: nodes, rfEdges: edges };
-  }, [visibleNodeIds, hierarchy, inputEdges, animationOrigin]);
+  }, [visibleNodeIds, hierarchy, inputEdges, animatingNodes, hoveredEdge]);
 
   return (
     <>
@@ -392,6 +418,12 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
         {`
           .react-flow__node {
             transition: transform ${ANIMATION_DURATION_MS}ms cubic-bezier(0.25, 0.8, 0.25, 1);
+          }
+          .react-flow__edge-path {
+            transition: stroke 0.2s ease, stroke-width 0.2s ease, opacity 0.2s ease;
+          }
+          .react-flow__edge {
+            cursor: pointer;
           }
         `}
       </style>
@@ -402,6 +434,8 @@ const VisualizationInternal: React.FC<Props> = ({ nodes: inputNodes = [], edges:
         nodeTypes={nodeTypes}
         onNodeClick={handleNodeClick}
         onPaneClick={handleCanvasClick}
+        onEdgeMouseEnter={(_, edge) => setHoveredEdge(edge.id)}
+        onEdgeMouseLeave={() => setHoveredEdge(null)}
         fitView
         minZoom={0.1}
         maxZoom={2}

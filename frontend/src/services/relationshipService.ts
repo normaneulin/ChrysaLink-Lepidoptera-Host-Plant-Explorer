@@ -96,111 +96,21 @@ class RelationshipService {
    * Fetch relationships from edge function or Supabase API
    */
   async fetchRelationships(filters?: RelationshipFilter): Promise<DenormalizedRelationship[]> {
-    try {
-      // Try edge function first for optimized query
-      const endpoint = `${SUPABASE_URL}/functions/v1/make-server-b55216b3/relationships`;
-      const params = new URLSearchParams();
-
-      if (filters?.lepidoptera_division) {
-        params.append('lep_division', filters.lepidoptera_division);
-      }
-      if (filters?.plant_division) {
-        params.append('plant_division', filters.plant_division);
-      }
-      if (filters?.level) {
-        params.append('level', filters.level);
-      }
-      if (filters?.exclude_placeholders) {
-        params.append('exclude_placeholders', 'true');
-      }
-      if (filters?.limit) {
-        params.append('limit', filters.limit.toString());
-      }
-
-      const response = await fetch(`${endpoint}?${params}`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': SUPABASE_ANON_KEY,
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-      });
-
-      if (response.ok) {
-        const apiResponse = await response.json();
-        
-        // Transform edge function response (GraphData format) to DenormalizedRelationship format
-        if (apiResponse.edges && apiResponse.edges.length > 0) {
-          const denormalized: DenormalizedRelationship[] = apiResponse.edges.map((edge: any) => {
-            const lepNode = apiResponse.nodes.find((n: any) => n.id === edge.source);
-            const plantNode = apiResponse.nodes.find((n: any) => n.id === edge.target);
-            
-            return {
-              relationship: {
-                id: edge.id,
-                lepidoptera_id: edge.source,
-                plant_id: edge.target,
-                relationship_type: edge.relationship_type,
-                observation_count: edge.observation_count,
-                verified_count: edge.verified_count,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                observation_id: null,
-              },
-              lepidoptera: lepNode?.data || {},
-              plant: plantNode?.data || {},
-            };
-          });
-          
-          if (denormalized.length > 0) {
-            console.log('Fetched relationships from edge function:', denormalized.length);
-            return denormalized;
-          }
-        }
-      }
-
-      // Fallback to direct Supabase API
-      console.warn('Edge function returned no data or not available, using fallback');
-      return this.fetchRelationshipsFallback(filters);
-    } catch (error) {
-      console.error('Error fetching relationships:', error);
-      return this.fetchRelationshipsFallback(filters);
-    }
+    // The edge function route `/functions/v1/make-server-b55216b3/relationships` is not available
+    // in the current deployment (returns 404). Use the stable Supabase REST fallback directly.
+    return this.fetchRelationshipsFallback(filters);
   }
 
   /**
    * Fallback relationship fetch using Supabase REST API
+   * Fetch relationships first, then fetch taxonomy data separately to avoid null joins
    */
   private async fetchRelationshipsFallback(
     filters?: RelationshipFilter
   ): Promise<DenormalizedRelationship[]> {
     try {
-      // Build query
-      let query = `
-        id,
-        lepidoptera_id,
-        plant_id,
-        relationship_type,
-        observation_count,
-        verified_count,
-        created_at,
-        updated_at,
-        observation_id,
-        lepidoptera_taxonomy!relationships_lepidoptera_id_fkey(
-          id, division, family, genus, specific_epithet, scientific_name, 
-          common_name, subfamily, tribe
-        ),
-        plant_taxonomy!relationships_plant_id_fkey(
-          id, division, family, genus, specific_epithet, scientific_name,
-          common_name, subfamily, tribe
-        )
-      `;
-
-      let url = `${SUPABASE_URL}/rest/v1/relationships?select=${encodeURIComponent(query)}&limit=1000`;
-
-      // Apply filters
-      if (filters?.exclude_placeholders) {
-        url += `&lepidoptera_taxonomy.scientific_name.not.is.null&plant_taxonomy.scientific_name.not.is.null`;
-      }
+      // Fetch relationships table with basic columns
+      let url = `${SUPABASE_URL}/rest/v1/relationships?select=id,lepidoptera_id,plant_id,relationship_type,observation_count,verified_count,created_at,updated_at,observation_id&limit=1000`;
 
       const response = await fetch(url, {
         headers: {
@@ -214,9 +124,29 @@ class RelationshipService {
         throw new Error(`Supabase error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const relationships = await response.json();
 
-      return data.map((row: any) => ({
+      // Collect all unique taxonomy IDs
+      const lepIds = new Set<string>();
+      const plantIds = new Set<string>();
+
+      for (const row of relationships) {
+        if (row.lepidoptera_id) lepIds.add(row.lepidoptera_id);
+        if (row.plant_id) plantIds.add(row.plant_id);
+      }
+
+      // Fetch taxonomy data in parallel
+      const [lepTaxonomy, plantTaxonomy] = await Promise.all([
+        this.fetchTaxonomyByIds('lepidoptera', Array.from(lepIds)),
+        this.fetchTaxonomyByIds('plant', Array.from(plantIds)),
+      ]);
+
+      // Map for fast lookup
+      const lepMap = new Map(lepTaxonomy.map(t => [t.id, t]));
+      const plantMap = new Map(plantTaxonomy.map(t => [t.id, t]));
+
+      // Merge relationships with fetched taxonomy
+      return relationships.map((row: any) => ({
         relationship: {
           id: row.id,
           lepidoptera_id: row.lepidoptera_id,
@@ -228,11 +158,40 @@ class RelationshipService {
           updated_at: row.updated_at,
           observation_id: row.observation_id,
         },
-        lepidoptera: row.lepidoptera_taxonomy,
-        plant: row.plant_taxonomy,
+        lepidoptera: row.lepidoptera_id ? lepMap.get(row.lepidoptera_id) || {} : {},
+        plant: row.plant_id ? plantMap.get(row.plant_id) || {} : {},
       }));
     } catch (error) {
       console.error('Fallback fetch failed:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch taxonomy records by ID list
+   */
+  private async fetchTaxonomyByIds(type: OrganismType, ids: string[]): Promise<TaxonomyRecord[]> {
+    if (ids.length === 0) return [];
+
+    try {
+      const table = type === 'lepidoptera' ? 'lepidoptera_taxonomy' : 'plant_taxonomy';
+      const idList = ids.map(id => `"${id}"`).join(',');
+      const url = `${SUPABASE_URL}/rest/v1/${table}?id=in.(${encodeURIComponent(idList)})&limit=1000`;
+
+      const response = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${type} taxonomy: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`Error fetching ${type} taxonomy by IDs:`, error);
       return [];
     }
   }
@@ -594,16 +553,23 @@ class RelationshipService {
 
     // Return cached data if fresh
     if (cached && Date.now() - cached.timestamp < this.CACHE_DURATION) {
-      console.log('Using cached graph data');
-      return cached.data;
+      const hasData = (cached.data.nodes?.length || 0) > 0 || (cached.data.edges?.length || 0) > 0;
+      if (hasData) {
+        console.log('Using cached graph data');
+        return cached.data;
+      }
+      // Cache was empty; fall through to refetch
+      this.cache.delete(cacheKey);
     }
 
     try {
       const denormalized = await this.fetchRelationships(filters);
       const graphData = this.buildGraphData(denormalized, filters?.level);
 
-      // Cache result
-      this.cache.set(cacheKey, { data: graphData, timestamp: Date.now() });
+      // Cache only if we actually have data, to avoid locking in an empty response
+      if ((graphData.nodes.length + graphData.edges.length) > 0) {
+        this.cache.set(cacheKey, { data: graphData, timestamp: Date.now() });
+      }
 
       return graphData;
     } catch (error) {

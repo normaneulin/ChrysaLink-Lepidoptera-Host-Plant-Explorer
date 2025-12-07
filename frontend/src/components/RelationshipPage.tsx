@@ -136,9 +136,6 @@ export function RelationshipPage() {
             <Network className="h-8 w-8" />
             Ecological Relationships
           </h1>
-          <p className="text-gray-600">
-            Explore the connections between Lepidoptera species and their host plants using interactive visualization
-          </p>
         </div>
 
         {/* Main visualization card */}
@@ -151,39 +148,6 @@ export function RelationshipPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Filter controls */}
-            <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b">
-              <div>
-                <label className="block text-sm font-medium mb-2">Lepidoptera Division</label>
-                <select
-                  value={selectedLepidopteraDivision}
-                  onChange={(e) => setSelectedLepidopteraDivision(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="">All divisions</option>
-                  {lepidopteraDivisions.map((div) => (
-                    <option key={div} value={div}>
-                      {div}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Plant Division</label>
-                <select
-                  value={selectedPlantDivision}
-                  onChange={(e) => setSelectedPlantDivision(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                >
-                  <option value="">All divisions</option>
-                  {plantDivisions.map((div) => (
-                    <option key={div} value={div}>
-                      {div}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
 
             {/* WebGL Graph Visualization */}
             <RelationshipGraph
@@ -244,11 +208,10 @@ export function RelationshipPage() {
               </div>
 
               {selectedLepidoptera && (
-                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="font-medium text-yellow-900">Selected:</div>
                   <div className="text-sm text-yellow-800 mt-2">
-                    <div><strong>Name:</strong> {selectedLepidoptera.display_name}</div>
-                    <div><strong>Level:</strong> {selectedLepidoptera.taxonomic_level}</div>
+                    <div><strong>Name:</strong> <em>{selectedLepidoptera.display_name}</em></div>
                     <div><strong>Division:</strong> {selectedLepidoptera.division}</div>
                     {selectedLepidoptera.family && <div><strong>Family:</strong> {selectedLepidoptera.family}</div>}
                     {selectedLepidoptera.genus && <div><strong>Genus:</strong> {selectedLepidoptera.genus}</div>}
@@ -299,11 +262,10 @@ export function RelationshipPage() {
               </div>
 
               {selectedPlant && (
-                <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="mt-6 p-4 bg-green-0 border border-black-200 rounded-lg">
                   <div className="font-medium text-green-900">Selected:</div>
                   <div className="text-sm text-green-800 mt-2">
-                    <div><strong>Name:</strong> {selectedPlant.display_name}</div>
-                    <div><strong>Level:</strong> {selectedPlant.taxonomic_level}</div>
+                    <div><strong>Scientific Name:</strong> <em>{selectedPlant.display_name}</em></div>
                     <div><strong>Division:</strong> {selectedPlant.division}</div>
                     {selectedPlant.family && <div><strong>Family:</strong> {selectedPlant.family}</div>}
                     {selectedPlant.genus && <div><strong>Genus:</strong> {selectedPlant.genus}</div>}
@@ -330,12 +292,7 @@ export function RelationshipPage() {
               (Division → Family → Genus → Species)
             </li>
             <li>
-              <strong>Filter:</strong> Use the division dropdowns to filter the graph by specific plant or
-              butterfly groups
-            </li>
-            <li>
-              <strong>Search:</strong> Use the search boxes to find specific species or taxa. Placeholder
-              taxons (unidentified species grouped at higher levels) are marked with <Badge className="inline ml-1">PH</Badge>
+              <strong>Search:</strong> Use the search boxes to find specific species or taxa.
             </li>
             <li>
               <strong>Edges:</strong> Lines connecting nodes represent observed relationships between species

@@ -78,7 +78,11 @@
   --color-green-200: oklch(.86 .10 149.4);
   --color-green-500: oklch(.723 .219 149.579);
   --color-green-600: oklch(.627 .194 149.214);
+    --color-yellow-100: oklch(.945 .077 86.047);
+    --color-yellow-200: oklch(.899 .141 86.047);
     --color-yellow-500: oklch(.795 .184 86.047);
+    --color-yellow-800: oklch(.554 .148 81.159);
+    --color-yellow-900: oklch(.464 .127 85.871);
     --color-green-500: oklch(.723 .219 149.579);
     --color-green-600: oklch(.627 .194 149.214);
     --color-blue-50: oklch(.97 .014 254.604);
