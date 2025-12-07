@@ -139,7 +139,7 @@ export function LandingPage() {
                 <h3 className="mb-2">Get AI Identification</h3>
                 <p className="text-gray-600">
                   {/*} Our system suggests species identifications automatically*/}
-                  Comming soon!
+                  Coming soon!
                 </p>
               </div>
             </div>
