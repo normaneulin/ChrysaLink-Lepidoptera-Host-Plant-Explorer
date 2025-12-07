@@ -108,27 +108,28 @@ async def ensure_model_loaded():
 
 @app.post('/predict')
 async def predict(req: PredictRequest):
-    # Lazy-load model on first request
+    # Check MOCK_MODE first to skip expensive model loading
+    mock_mode = os.environ.get('MOCK_MODE', '').lower() in ('1', 'true', 'yes')
+    
+    if mock_mode:
+        # Return mock predictions without loading the model
+        sample_labels = []
+        try:
+            with open(NATURALIA_DIR / 'names_mf2.txt', 'r', encoding='utf-8') as f:
+                sample_labels = [l.strip() for l in f.readlines() if l.strip()]
+        except Exception:
+            sample_labels = ['Danaus plexippus', 'Papilio machaon', 'Pieris rapae', 'Vanessa atalanta', 'Morpho peleides']
+
+        k = req.top_k or 5
+        out = []
+        for i, lab in enumerate(sample_labels[:k]):
+            out.append({'label': lab, 'score': float(1.0 / (i + 1))})
+        return {'success': True, 'data': out}
+    
+    # Otherwise, lazy-load the real model on first request
     await ensure_model_loaded()
     
     if inference_model is None:
-        # If model failed to initialize, allow a MOCK_MODE to return deterministic sample predictions
-        mock_mode = os.environ.get('MOCK_MODE', '').lower() in ('1', 'true', 'yes')
-        if mock_mode:
-            # Try to read local names file for realistic labels
-            sample_labels = []
-            try:
-                with open(NATURALIA_DIR / 'names_mf2.txt', 'r', encoding='utf-8') as f:
-                    sample_labels = [l.strip() for l in f.readlines() if l.strip()]
-            except Exception:
-                sample_labels = ['Danaus plexippus', 'Papilio machaon', 'Pieris rapae', 'Vanessa atalanta', 'Morpho peleides']
-
-            k = req.top_k or 5
-            out = []
-            for i, lab in enumerate(sample_labels[:k]):
-                out.append({'label': lab, 'score': float(1.0 / (i + 1))})
-            return {'success': True, 'data': out}
-
         raise HTTPException(status_code=503, detail='Model not initialized')
 
     # Obtain PIL Image
